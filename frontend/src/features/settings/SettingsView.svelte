@@ -2,17 +2,15 @@
   import { useTranslations } from '../../lib/i18n';
   const t = useTranslations();
 
-  import { onMount } from 'svelte';
-  import { onConnectionChange } from '../../lib/api/realtime';
   import type { Editor } from '../editor/editor.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
   import IntegrationSettings from './IntegrationSettings.svelte';
-  import DeviceSettings from './DeviceSettings.svelte';
-  import NetworkSettings from './NetworkSettings.svelte';
+  import ConnectionHub from '../connections/ConnectionHub.svelte';
   import RuntimeSettings from './RuntimeSettings.svelte';
   import BackupSettings from './BackupSettings.svelte';
   let {
     activeTab = $bindable('appearance'),
+    connectionRequest = 0,
     editor,
     languages,
     transport = $bindable(),
@@ -24,6 +22,7 @@
     notify,
   }: {
     activeTab?: string;
+    connectionRequest?: number;
     editor: Editor;
     languages: string[];
     transport: 'http' | 'socket';
@@ -34,15 +33,12 @@
     reload: () => Promise<void>;
     notify: (message: string) => void;
   } = $props();
-  let connected = $state(false);
-  onMount(() => onConnectionChange((value) => (connected = value)));
   const sections = [
     ['appearance', 'ui_appearance'],
     ['integrations', 'ui_integrations'],
-    ['devices', 'ui_devices'],
+    ['devices', 'ui_devices_connections'],
     ['backups', 'ui_backups'],
     ['runtime', 'ui_runtime'],
-    ['connection', 'ui_connection'],
   ] as const;
 </script>
 
@@ -72,7 +68,7 @@
   {#each sections as [id, label]}<button
       role="tab"
       id={`tab-${id}`}
-      aria-controls={id === 'connection' ? 'settings-connection' : `panel-${id}`}
+      aria-controls={`panel-${id}`}
       aria-selected={activeTab === id}
       tabindex={activeTab === id ? 0 : -1}
       onclick={() => (activeTab = id)}
@@ -127,7 +123,7 @@
     aria-labelledby="tab-devices"
     hidden={activeTab !== 'devices'}
   >
-    <DeviceSettings {attempt} />
+    <ConnectionHub {attempt} bind:transport trigger={connectionRequest} />
   </div>
   <div
     role="tabpanel"
@@ -136,25 +132,6 @@
     hidden={activeTab !== 'backups'}
   >
     <BackupSettings {editor} {reload} {notify} />
-  </div>
-  <div
-    hidden={activeTab !== 'connection'}
-    role="tabpanel"
-    id="settings-connection"
-    aria-labelledby="tab-connection"
-  >
-    <NetworkSettings {attempt} />
-    <h2 id="connection-title">{t('ui_advanced_connection')}</h2>
-    <p aria-label={t('ui_realtime_connection')}>
-      {connected ? t('ui_connected') : t('ui_offline')}
-    </p>
-    <label
-      >{t('ui_connection')}<select bind:value={transport}
-        ><option value="http">{t('ui_http')}</option><option value="socket"
-          >{t('ui_realtime')}</option
-        ></select
-      ></label
-    >
   </div>
 </div>
 

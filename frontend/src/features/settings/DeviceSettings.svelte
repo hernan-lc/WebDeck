@@ -4,9 +4,23 @@
   const t = useTranslations();
 
   import { onMount, onDestroy } from 'svelte';
+  import PermissionProfiles from '../connections/PermissionProfiles.svelte';
+  import { request } from '../../lib/api/client';
+  import type {
+    DevicePresenceList,
+    PermissionProfiles as Profiles,
+    DeviceUpdate,
+  } from '../../lib/contracts';
   import type { Device, DeviceApproval, Capability } from '../../lib/contracts';
   import { devices as listDevices, approve, revoke } from '../../lib/api/client';
   let { attempt }: { attempt: (work: () => Promise<void>) => Promise<void> } = $props();
+  let presence = $state<DevicePresenceList | null>(null),
+    profiles = $state<Profiles | null>(null),
+    selected = $state<Device | null>(null);
+  let newName = $state(''),
+    newCapabilities = $state<Capability[]>([]),
+    newTtl = $state(2592000);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let devices = $state<Device[]>([]),
     grant = $state<DeviceApproval | null>(null),
     deviceName = $state('');
@@ -20,6 +34,7 @@
   let loadGeneration = 0;
   let revoking = $state<Record<string, boolean>>({});
   onDestroy(() => {
+    clearTimeout(timer);
     destroyed = true;
     loadGeneration++;
     grant = null;
@@ -29,13 +44,70 @@
     loading = true;
     loadError = '';
     try {
-      const result = await listDevices();
+      const [result, state, options] = await Promise.all([
+        listDevices(),
+        request<DevicePresenceList>('devices/presence', 'DevicePresenceList').catch(() => null),
+        request<Profiles>('connection/profiles', 'PermissionProfiles').catch(() => null),
+      ]);
+      if (!destroyed) {
+        presence = state;
+        profiles = options;
+      }
       if (!destroyed && generation === loadGeneration) devices = result.devices;
     } catch (e) {
       if (!destroyed && generation === loadGeneration)
         loadError = e instanceof Error ? e.message : String(e);
     } finally {
-      if (!destroyed && generation === loadGeneration) loading = false;
+      if (!destroyed && generation === loadGeneration) {
+        loading = false;
+        clearTimeout(timer);
+        timer = setTimeout(() => void getDevices(), 5000);
+      }
+    }
+  }
+  function profileName(device: Device) {
+    const same = (values: Capability[]) =>
+      device.capabilities.length === values.length &&
+      values.every((cap) => device.capabilities.includes(cap));
+    return same(['read'])
+      ? 'ui_profile_view'
+      : profiles && same(profiles.full)
+        ? 'ui_profile_full'
+        : profiles && same(profiles.recommended)
+          ? 'ui_profile_deck'
+          : 'ui_profile_custom';
+  }
+  function edit(device: Device) {
+    selected = device;
+    newName = device.name;
+    newCapabilities = [...device.capabilities];
+  }
+  async function saveDevice() {
+    if (!selected || working) return;
+    if (
+      newCapabilities.some(
+        (cap) =>
+          ['power', 'script', 'network', 'plugin'].includes(cap) &&
+          !selected!.capabilities.includes(cap),
+      ) &&
+      !window.confirm(t('ui_full_controller_help'))
+    )
+      return;
+    working = true;
+    try {
+      const update: DeviceUpdate = {
+        name: newName,
+        capabilities: newCapabilities,
+        ttl_seconds: newTtl,
+      };
+      await request(`devices/${encodeURIComponent(selected.id)}`, 'Device', {
+        method: 'PATCH',
+        body: JSON.stringify(update),
+      });
+      selected = null;
+      await getDevices();
+    } finally {
+      working = false;
     }
   }
   async function addDevice() {
@@ -87,41 +159,28 @@
     <button onclick={getDevices}>{t('ui_retry')}</button>{:else if !devices.length}<p>
       {t('ui_no_devices_paired_yet')}
     </p>{/if}
-  <label>{t('ui_device_name')}<input bind:value={deviceName} /></label>
-  <fieldset>
-    <legend>{t('ui_permissions')}</legend
-    >{#each ['read', 'input', 'audio', 'window', 'power', 'script', 'network', 'plugin'] as c}<label
-        class="check"
-        ><input type="checkbox" value={c} bind:group={grantCapabilities} />{t(
-          capabilityNames[c] ?? c,
-        )}</label
-      >{/each}
-  </fieldset>
-  <label
-    >{t('ui_expires_after')}<select bind:value={grantTtl}
-      ><option value={900}>{t('ui_15_minutes')}</option><option value={3600}
-        >{t('ui_1_hour')}</option
-      ><option value={28800}>{t('ui_8_hours')}</option><option value={86400}>{t('ui_1_day')}</option
-      ></select
-    ></label
-  >
-  <button
-    aria-describedby="device-approval-help"
-    disabled={working || !deviceName.trim() || !grantCapabilities.length}
-    onclick={() => attempt(addDevice)}>{t('ui_approve_device')}</button
-  >
-  <p id="device-approval-help">
-    {working ? t('ui_approving_device') : t('ui_device_approval_help')}
-  </p>
-  {#if grant}<p>{t('ui_copy_this_token_now_it_will_not_be_shown_again')}</p>
-    <code class="token">{grant.token}</code><button onclick={() => attempt(copyToken)}
-      >{copied ? t('ui_copied') : t('ui_copy_token')}</button
-    ><button
-      onclick={() => {
-        grant = null;
-      }}>{t('ui_hide_token')}</button
-    >{/if}
-  {#if copied && !grant}<p role="status">{t('ui_token_copied_keep_it_somewhere_safe')}</p>{/if}
+  {#if selected}
+    <fieldset disabled={working}>
+      <legend>{t('ui_manage_device')}</legend>
+      <label>{t('ui_device_name')}<input bind:value={newName} maxlength="128" /></label>
+      <PermissionProfiles
+        bind:selected={newCapabilities}
+        recommended={profiles?.recommended ?? ['read']}
+      />
+      <label
+        >{t('ui_trust_duration')}<select bind:value={newTtl}
+          ><option value={900}>{t('ui_current_session')}</option><option value={2592000}
+            >{t('ui_30_days')}</option
+          ><option value={315360000}>{t('ui_until_revoked')}</option></select
+        ></label
+      >
+      <button
+        disabled={!newName.trim() || !newCapabilities.length}
+        onclick={() => attempt(saveDevice)}>{t('ui_save_changes')}</button
+      >
+      <button onclick={() => (selected = null)}>{t('ui_cancel')}</button>
+    </fieldset>
+  {/if}
   {#each devices as device}<div class="row">
       <div>
         <strong>{device.name}</strong> ·
@@ -130,24 +189,54 @@
             ? t('ui_revoked')
             : revoking[device.id]
               ? t('ui_revoking_device')
-              : t('ui_approved')}</span
+              : presence?.devices.find((p) => p.device.id === device.id)?.online
+                ? t('ui_connected')
+                : t('ui_offline')}</span
         >
+        <p>{t('ui_permission_profile')}: {t(profileName(device))}</p>
         <p class="device-details">
           {t('ui_device_expiry', {
-            expiry: new Date(device.expires_at * 1000).toLocaleString(
-              document.documentElement.lang,
-            ),
+            expiry:
+              device.expires_at === 9007199254740991
+                ? t('ui_until_revoked')
+                : new Date(device.expires_at * 1000).toLocaleString(document.documentElement.lang),
           })} · {device.capabilities
             .map((capability) => t(capabilityNames[capability] ?? capability))
             .join(', ')}
         </p>
+        {#if presence?.devices.find((p) => p.device.id === device.id)?.last_seen}<p>
+            {t('ui_last_seen')}: {new Date(
+              presence!.devices.find((p) => p.device.id === device.id)!.last_seen * 1000,
+            ).toLocaleString()}
+          </p>{/if}
       </div>
+      <button disabled={device.revoked} onclick={() => edit(device)}>{t('ui_manage_device')}</button
+      >
       <button
         aria-describedby={`device-state-${device.id}`}
         disabled={device.revoked || revoking[device.id]}
         onclick={() => attempt(() => revokeDevice(device.id))}>{t('ui_revoke')}</button
       >
     </div>{/each}
+  <details>
+    <summary>{t('ui_use_pairing_token')}</summary>
+    <label>{t('ui_device_name')}<input bind:value={deviceName} maxlength="128" /></label>
+    <PermissionProfiles
+      bind:selected={grantCapabilities}
+      recommended={profiles?.recommended ?? ['read']}
+    />
+    <p id="device-approval-help">{t('ui_device_approval_help')}</p>
+    <button
+      aria-describedby="device-approval-help"
+      disabled={working || !deviceName.trim() || !grantCapabilities.length}
+      onclick={() => attempt(addDevice)}>{t('ui_approve_device')}</button
+    >
+    {#if grant}<p>{t('ui_copy_this_token_now_it_will_not_be_shown_again')}</p>
+      <code class="token">{grant.token}</code><button onclick={() => attempt(copyToken)}
+        >{t('ui_copy_token')}</button
+      ><button onclick={() => (grant = null)}>{t('ui_hide_token')}</button>{/if}
+    {#if copied}<p role="status">{t('ui_token_copied_keep_it_somewhere_safe')}</p>{/if}
+  </details>
 </section>
 
 <style>

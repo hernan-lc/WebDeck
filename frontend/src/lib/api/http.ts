@@ -4,6 +4,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -41,8 +42,8 @@ export async function request<T>(path: string, name: string, init: RequestInit =
   }
   const v: unknown = await r.json();
   if (!r.ok) {
-    const e = v as { message?: string };
-    throw new ApiError(r.status, e.message ?? 'Request failed');
+    const e = v as { message?: string; code?: string };
+    throw new ApiError(r.status, e.message ?? 'Request failed', e.code);
   }
   return contract<T>(name, v);
 }

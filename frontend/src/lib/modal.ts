@@ -6,9 +6,17 @@ export function modal(dialog: HTMLDialogElement) {
     if (event.key !== 'Tab') return;
     const targets = [
       ...dialog.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]',
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex]',
       ),
-    ].filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        element.getClientRects().length > 0 &&
+        ![...dialog.querySelectorAll('details:not([open])')].some(
+          (details) =>
+            details.contains(element) && details.querySelector(':scope > summary') !== element,
+        ),
+    );
     const first = targets[0],
       last = targets.at(-1);
     if (!first || !last) {

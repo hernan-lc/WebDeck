@@ -29,7 +29,9 @@
         "shutting_down",
         "execution_failed",
         "persistence_failed",
-        "unsupported_platform"
+        "unsupported_platform",
+        "authorization_expired",
+        "device_revoked"
       ]
     },
     "FileSource": {
@@ -1605,7 +1607,7 @@
         "ttl_seconds": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 86400
+          "maximum": 315360000
         }
       },
       "required": [
@@ -3085,6 +3087,10 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "invitation": {
+          "type": "string",
+          "maxLength": 128
         }
       },
       "required": [
@@ -3125,10 +3131,14 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
         },
         "secret": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
         }
       },
       "required": [
@@ -3209,6 +3219,298 @@
       "required": [
         "api_version",
         "requests"
+      ]
+    },
+    "ConnectionAddress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "interface": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "preferred": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "interface",
+        "address",
+        "preferred"
+      ]
+    },
+    "ConnectionStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "network": {
+          "$ref": "#/$defs/NetworkStatus"
+        },
+        "addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConnectionAddress"
+          }
+        },
+        "listener_started": {
+          "type": "boolean"
+        },
+        "network_detected": {
+          "type": "boolean"
+        },
+        "client_reachability_verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "api_version",
+        "network",
+        "addresses",
+        "listener_started",
+        "network_detected",
+        "client_reachability_verified"
+      ]
+    },
+    "ConnectionInvitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "expires_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "api_version",
+        "id",
+        "url",
+        "expires_at"
+      ]
+    },
+    "DeviceUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "minItems": 1,
+          "maxItems": 10
+        },
+        "ttl_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 315360000
+        }
+      },
+      "required": [
+        "name",
+        "capabilities",
+        "ttl_seconds"
+      ]
+    },
+    "DevicePresence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "device": {
+          "$ref": "#/$defs/Device"
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "last_seen": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "api_version",
+        "device",
+        "online",
+        "last_seen"
+      ]
+    },
+    "DevicePresenceList": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DevicePresence"
+          }
+        }
+      },
+      "required": [
+        "api_version",
+        "devices"
+      ]
+    },
+    "PermissionProfiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "recommended": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "minItems": 1,
+          "maxItems": 10
+        },
+        "full": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "minItems": 1,
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "api_version",
+        "recommended",
+        "full"
+      ]
+    },
+    "PermissionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "minItems": 1,
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "capabilities"
+      ]
+    },
+    "PermissionPending": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "device": {
+          "$ref": "#/$defs/Device"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "minItems": 1,
+          "maxItems": 10
+        },
+        "expires_at": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "device",
+        "capabilities",
+        "expires_at"
+      ]
+    },
+    "PermissionRequests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PermissionPending"
+          }
+        }
+      },
+      "required": [
+        "api_version",
+        "requests"
+      ]
+    },
+    "DeviceRenew": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ttl_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 315360000
+        }
+      },
+      "required": [
+        "ttl_seconds"
+      ]
+    },
+    "ConnectionProgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_version": {
+          "const": 2
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "pending",
+            "approved",
+            "rejected",
+            "expired"
+          ]
+        }
+      },
+      "required": [
+        "api_version",
+        "state"
       ]
     }
   }

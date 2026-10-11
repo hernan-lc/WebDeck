@@ -47,6 +47,10 @@ pub enum ErrorCode {
     PersistenceFailed,
     #[serde(rename = "unsupported_platform")]
     UnsupportedPlatform,
+    #[serde(rename = "authorization_expired")]
+    AuthorizationExpired,
+    #[serde(rename = "device_revoked")]
+    DeviceRevoked,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
@@ -745,6 +749,8 @@ pub struct NetworkStatus {
 #[serde(deny_unknown_fields)]
 pub struct PairingRequest {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invitation: Option<String>,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -782,6 +788,89 @@ pub struct PairingPending {
 pub struct PairingList {
     pub api_version: u64,
     pub requests: Vec<PairingPending>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionAddress {
+    pub interface: String,
+    pub address: String,
+    pub preferred: bool,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionStatus {
+    pub api_version: u64,
+    pub network: NetworkStatus,
+    pub addresses: Vec<ConnectionAddress>,
+    pub listener_started: bool,
+    pub network_detected: bool,
+    pub client_reachability_verified: bool,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionInvitation {
+    pub api_version: u64,
+    pub id: String,
+    pub url: String,
+    pub expires_at: u64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeviceUpdate {
+    pub name: String,
+    pub capabilities: Vec<Capability>,
+    pub ttl_seconds: u64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DevicePresence {
+    pub api_version: u64,
+    pub device: Device,
+    pub online: bool,
+    pub last_seen: u64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DevicePresenceList {
+    pub api_version: u64,
+    pub devices: Vec<DevicePresence>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionProfiles {
+    pub api_version: u64,
+    pub recommended: Vec<Capability>,
+    pub full: Vec<Capability>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionRequest {
+    pub capabilities: Vec<Capability>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionPending {
+    pub id: String,
+    pub device: Device,
+    pub capabilities: Vec<Capability>,
+    pub expires_at: u64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionRequests {
+    pub api_version: u64,
+    pub requests: Vec<PermissionPending>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeviceRenew {
+    pub ttl_seconds: u64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionProgress {
+    pub api_version: u64,
+    pub state: String,
 }
 impl Command {
     pub fn capability(&self) -> Capability {

@@ -6,7 +6,7 @@
       "request_id": "id",
       "command": {
         "type": "write",
-        "text": "😀",
+        "text": "\ud83d\ude00",
         "send": false
       }
     },
@@ -140,6 +140,56 @@
     "value": {
       "api_version": 1,
       "source": null
+    },
+    "valid": false
+  },
+  {
+    "label": "invitation pairing remains compatible without invitation",
+    "definition": "PairingRequest",
+    "value": {
+      "name": "Phone"
+    },
+    "valid": true
+  },
+  {
+    "label": "invitation pairing accepts bounded invitation",
+    "definition": "PairingRequest",
+    "value": {
+      "name": "Phone",
+      "invitation": "abc"
+    },
+    "valid": true
+  },
+  {
+    "label": "pairing claim rejects unbounded secret",
+    "definition": "PairingClaim",
+    "value": {
+      "id": "request",
+      "secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "valid": false
+  },
+  {
+    "label": "device renewal accepts persistent trust",
+    "definition": "DeviceRenew",
+    "value": {
+      "ttl_seconds": 2592000
+    },
+    "valid": true
+  },
+  {
+    "label": "device renewal rejects empty expiry",
+    "definition": "DeviceRenew",
+    "value": {
+      "ttl_seconds": 0
+    },
+    "valid": false
+  },
+  {
+    "label": "permission request rejects empty grant",
+    "definition": "PermissionRequest",
+    "value": {
+      "capabilities": []
     },
     "valid": false
   }

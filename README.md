@@ -28,39 +28,60 @@ such as PipeWire/PulseAudio and wmctrl. Media controls use MPRIS directly.
 On Wayland, keyboard actions request host approval through the desktop portal;
 WebDeck retains that session while running.
 
-For LAN access, start with `--host 0.0.0.0`. Approve a device in Settings from the
-local browser, choose its capabilities and expiry, and enter its token on the
-controller. Tokens never go in URLs. A controller cannot retrieve integration
-credentials or the source of configured actions: it invokes button references,
-and the server resolves and authorizes them on each request. Use a trusted network when transporting credentials.
+Connect your phone from the computer with **Connect Device**. Scan the QR,
+compare the verification code, and approve the device. No IP, port, or token entry
+is needed. Choose temporary access, 30 days, or until revoked on the computer.
+Returning devices restore their saved access on the same browser origin.
+Controllers invoke button references; the server resolves and authorizes each
+request, including nested actions and plugin permissions.
 
-The normal view is just the button grid. Usage readings live in buttons, folders
+The host view shows the button grid and Connect Device. Usage readings live in buttons, folders
 open as pages, and settings/edit shortcuts can be removed like any other button.
 Right-click or hold the deck for controls, `Q` to edit, or `Ctrl+,` for settings.
 
 ## Phone access and hot reload
 
-Open **Settings → Connection → Phone access** on the computer. Enable
-**Allow phones on my local network**, use the detected computer address, and click
-**Apply phone access**. The phone listener starts immediately, the page shows its
-address and QR, and the setting stays saved after restarting. No CLI arguments
-are needed. The local settings connection stays open while you change the phone
-address or port. **Refresh address and QR** checks the current connection again;
-**Use detected address** fills the detected IP into the form before applying it.
-The tray's **Show QR code** follows the currently applied phone address.
+1. Open WebDeck on your computer.
+2. Click **Connect Device**.
+3. Scan the QR with your phone or tablet.
+4. Compare the code and approve your phone on the computer.
+5. Start controlling your deck.
 
-Open **Settings → Devices** on the computer, approve your phone with the capabilities
-its buttons need (OBS uses `network`), then scan the QR and enter the token on the
-phone. The QR contains the deck address only. If the page cannot open, check that
-your firewall allows the chosen TCP port and that the router does not isolate
-Wi-Fi clients. Use a trusted local network. Disable phone access and apply to
-stop the phone listener and reject further remote actions.
+**Settings → Devices & Connections** shows approved devices and their current
+online status. **Manage device** renames, changes permissions, or renews access
+without replacing the credential. Revoke access there at any time. Phones can
+request additional permissions; the computer must explicitly approve them, and
+the phone must attempt the action again.
 
-Phone connection settings are saved separately in `<config-dir>/network.v2.json`;
-deck backup imports do not change network exposure. After an IP change, choose
-the newly detected address and apply it. A failed bind preserves the previous
-working listener. Advanced launch flags `--lan` / `--host 0.0.0.0` and `--qr-url`
-remain available, but the browser controls are the normal setup path.
+Starting the wizard enables LAN access. WebDeck prefers a local network interface,
+reuses a running listener, and picks an available port if the preferred one is
+busy. Invitations expire after two minutes and can be used by one device. The QR
+contains an invitation, never a device credential. A successful listener bind is
+not proof that your phone can reach it.
+
+Use a trusted local network: plain HTTP does not protect credentials from network
+observers. Do not forward WebDeck ports to the internet. A separately configured
+HTTPS reverse proxy must preserve Host/Origin validation and the localhost admin
+boundary; it must never make forwarded clients appear local. See
+[connection architecture and API](docs/v2/CONNECTIONS.md).
+
+### Advanced network configuration
+
+Expand **Advanced connection** for a specific address/port, listener disable,
+manual token pairing, and HTTP/realtime transport selection. Check that the
+computer and phone use the same network, allow the TCP port in the host firewall,
+and disable router client isolation if needed. VPN and virtual interfaces are
+ranked after ordinary network interfaces; choose an override when appropriate.
+IPv6 link-local addresses are excluded because browser URLs need interface scopes.
+Automatic exposure chooses private IPv4 or unique-local IPv6 addresses.
+
+Network settings remain separate in `<config-dir>/network.v2.json`; deck backup
+restores cannot enable LAN exposure. Failed reconfiguration retains the working
+listener. The wizard detects address changes during this run and refreshes its
+connection status. If the origin changes, scan a fresh QR and approve again:
+browser storage does not transfer between addresses or ports. CLI flags `--lan`,
+`--host`, and `--qr-url` remain available for advanced setup. The tray QR continues
+to provide a plain deck URL; use the connection hub for invitation pairing.
 
 For frontend development with hot reload, keep the Rust server running locally
 and run this from the repository root:
@@ -149,7 +170,7 @@ See [implementation and validation status](docs/v2/STATUS.md) for platform gaps 
 
 The v2 deck adapts its visual orientation to portrait screens without rewriting saved cell positions. Q opens a fixed editing dock: tiles and labels keep their coordinates. Button settings are organized into Content, Appearance and Action tabs; host settings and the controls dialog also support keyboard-accessible tabs. Built-in icons use `icon:folder`, `icon:settings`, `icon:play`, and other SVG names available in the button icon picker. Uploaded `asset:` images remain supported.
 
-The frontend JavaScript budget is 265 KB uncompressed / 82 KB gzip. This includes the inline SVG icon library, icon chooser and accessible tab panels; the demo no longer requires raster files for its built-in icons.
+The frontend JavaScript budget is 300 KB uncompressed / 91 KB gzip. This includes the inline SVG icon library, icon chooser and accessible tab panels; the demo no longer requires raster files for its built-in icons.
 
 Start with [the v2 quickstart](docs/quickstart-v2.md). Preliminary native installers and remaining hardware checks are described in [release preparation](docs/v2/preliminary-release.md).
 

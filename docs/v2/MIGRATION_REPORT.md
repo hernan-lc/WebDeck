@@ -40,3 +40,5 @@ native actions were not invoked. The extracted portable package and real updater
 rollback are validated separately from source/browser tests. This report makes no before/after performance claim.
 
 Repository settings, release publication and artifact upload are outside this change.
+
+The external-device connection refactor preserves devices.v2.json and network.v2.json; the optional versioned history sidecar and rollback procedure are described in [CONNECTIONS.md](CONNECTIONS.md).

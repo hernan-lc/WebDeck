@@ -50,3 +50,11 @@ composes these owners. Remaining plan work is tracked in the
 
 
 The binaries are `webdeck`, `console`, `update`, `webdeck-qr` and the development packager `package`. `webdeckctl` is the administrative CLI; it parses arguments in `src/bin/webdeckctl.rs` and calls the shared `src/admin` module. Runtime data lives in the selected config directory. Shipped data consists of v2 defaults, translations, version metadata and application icons.
+
+Device connections have one LAN listener owner in `connection::manager`; `network`
+re-exports it for compatibility. `connection::discovery` enumerates interfaces and
+`connection::permissions` derives deck permission profiles. `Sessions` remains the
+shared HTTP/Socket.IO authority for persisted grants, invitation pairing, requests,
+and active device presence. The Svelte connection hub consolidates networking and
+device management, and `ConnectionController` coordinates read-only recovery.
+See [connection APIs, security and storage compatibility](v2/CONNECTIONS.md).

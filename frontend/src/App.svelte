@@ -11,6 +11,9 @@
   import DeckView from './features/deck/DeckView.svelte';
   import SettingsView from './features/settings/SettingsView.svelte';
   import PairingView from './features/pairing/PairingView.svelte';
+  import { ConnectionController } from './lib/connection.svelte';
+  import PermissionRequest from './features/connections/PermissionRequest.svelte';
+  import { onDeviceEvent } from './lib/api/realtime';
   import PairingApprovals from './features/pairing/PairingApprovals.svelte';
   import Feedback from './components/Feedback.svelte';
   import DeckControls from './features/deck/DeckControls.svelte';
@@ -21,6 +24,18 @@
   import { DeckInteractions } from './features/deck/interactions.svelte';
   import { Execution, permissionReason } from './features/deck/execution.svelte';
   import { appearanceOf } from './features/editor/appearance';
+  const connection = new ConnectionController();
+  let connectionRequest = $state(0);
+  onMount(() => {
+    connection.start();
+    const remove = onDeviceEvent((event) => {
+      if (event === 'device.permissions_changed' && !session.deck?.can_edit) void session.load();
+    });
+    return () => {
+      remove();
+      connection.dispose();
+    };
+  });
   let error = $state(''),
     notice = $state(''),
     editing = $state(false),
@@ -43,6 +58,14 @@
   const t = provideTranslations(() => session.translations);
   $effect(() => {
     document.documentElement.lang = session.translations.lang_code || 'en';
+  });
+  $effect(() => {
+    if (!session.deck || session.deck.can_edit) return;
+    const capabilities = ['revoked', 'authorization_expired'].includes(connection.state)
+      ? []
+      : connection.device?.capabilities;
+    if (capabilities && capabilities.join(',') !== session.deck.capabilities.join(','))
+      session.deck.capabilities = [...capabilities];
   });
   const navigation = new Navigation(
     () => layout,
@@ -229,7 +252,33 @@
   {:else if session.loading}<main aria-busy="true"><p>{t('ui_loading_webdeck')}</p></main>
   {:else if session.deck}
     <main>
+      {#if ['reconnecting', 'offline'].includes(connection.state)}<p role="status">
+          {t('ui_connection_reconnecting')}
+        </p>{/if}
+      {#if ['authorization_expired', 'revoked'].includes(connection.state)}<p role="alert">
+          {t('ui_connection_expired')}
+        </p>
+        <button
+          onclick={() => {
+            setToken('');
+            connection.state = 'pairing';
+            session.pairing = true;
+          }}>{t('ui_request_access')}</button
+        >{/if}
       {#if navigation.panel === 'deck'}
+        {#if !session.deck.can_edit}<PermissionRequest
+            capabilities={session.deck.capabilities}
+            {attempt}
+            authorizationChanged={() => void connection.refresh()}
+          />{/if}
+        {#if session.deck.can_edit}<button
+            class="primary"
+            onclick={() => {
+              settingsTab = 'devices';
+              connectionRequest++;
+              openSettings();
+            }}>{t('ui_connect_device')}</button
+          >{/if}
         <h1 class="sr-only">{current?.label ?? 'Deck'}</h1>
         {#if current && session.editor}<EditorToolbar
             {editing}
@@ -271,6 +320,7 @@
       {:else if navigation.panel === 'settings' && session.editor}
         <SettingsView
           bind:activeTab={settingsTab}
+          {connectionRequest}
           editor={session.editor}
           languages={session.languages}
           bind:transport

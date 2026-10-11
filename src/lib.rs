@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod automation;
 pub mod capabilities;
+pub mod connection;
 pub mod contracts;
 pub mod desktop;
 pub mod domain;

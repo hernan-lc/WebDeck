@@ -17,6 +17,12 @@ cargo run --bin webdeckctl -- status
 ./target/debug/webdeckctl --help
 ```
 
+Phones and tablets use **Connect Device → scan QR → host approval** in the browser.
+The CLI keeps its existing URL/header credential resolution. Manual device tokens
+remain under Advanced in **Settings → Devices & Connections** for scripts and CLI
+consumers. Renewing or editing an approved device does not replace its token;
+revocation still blocks CLI commands. See [device connections](v2/CONNECTIONS.md).
+
 ## Connection resolution
 
 Options are resolved in this order; the first source that provides a value wins.
