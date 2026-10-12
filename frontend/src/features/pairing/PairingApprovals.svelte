@@ -1,5 +1,13 @@
 <script lang="ts">
   import { useTranslations } from '../../lib/i18n';
+  import { onDestroy } from 'svelte';
+  import PermissionProfiles from '../connections/PermissionProfiles.svelte';
+  import { request as apiRequest } from '../../lib/api/client';
+  import type {
+    PermissionProfiles as Profiles,
+    PermissionPending,
+    PermissionRequests,
+  } from '../../lib/contracts';
   import { capabilityNames } from '../../lib/capability-labels';
   import { ApiError, approvePairing, pairings, rejectPairing } from '../../lib/api/client';
   import type { Capability, PairingList, PairingPending } from '../../lib/contracts';
@@ -27,7 +35,10 @@
 
   let requests = $state<PairingPending[]>([]);
   let grants = $state<Record<string, Capability[]>>({});
-  let ttl = $state(86400);
+  let ttl = $state(900);
+  let profiles = $state<Profiles | null>(null);
+  let upgrades = $state<PermissionPending[]>([]);
+  let profile = $state<Record<string, string>>({});
   let working = $state('');
   let action = $state<'approve' | 'reject'>('approve');
   let listening = $state(true);
@@ -42,11 +53,50 @@
     const fallback = (['read', 'input'] as Capability[]).filter((capability) =>
       choices.includes(capability),
     );
-    return needed.length ? needed : fallback.length ? fallback : choices.slice(0, 1);
+    return (
+      profiles?.recommended ??
+      (needed.length
+        ? [...new Set(['read' as Capability, ...needed])]
+        : fallback.length
+          ? fallback
+          : choices.slice(0, 1))
+    );
   }
+  const notifications = new Map<string, Notification>();
+  onDestroy(() => {
+    notifications.forEach((notification) => notification.close());
+    notifications.clear();
+  });
   function apply(list: PairingList) {
+    for (const [id, notification] of notifications)
+      if (!list.requests.some((request) => request.id === id)) {
+        notification.close();
+        notifications.delete(id);
+      }
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      for (const request of list.requests)
+        if (!grants[request.id] && !notifications.has(request.id)) {
+          try {
+            const notification = new Notification(t('ui_pending_pairing_requests'), {
+              body: `${request.name} · ${request.code}`,
+              tag: `webdeck-pairing-${request.id}`,
+            });
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
+            notifications.set(request.id, notification);
+          } catch {
+            /* Unsupported OS notifications must never block approval. */
+          }
+        }
+    }
     requests = list.requests;
-    for (const request of requests) if (!grants[request.id]) grants[request.id] = defaults();
+    for (const request of requests)
+      if (!grants[request.id]) {
+        grants[request.id] = defaults();
+        profile[request.id] = 'deck';
+      }
   }
   function toggle(id: string, capability: Capability, on: boolean) {
     const current = grants[id] ?? [];
@@ -56,7 +106,14 @@
   }
   async function refresh() {
     try {
-      apply(await pairings());
+      const [options, list, permissions] = await Promise.all([
+        apiRequest<Profiles>('connection/profiles', 'PermissionProfiles'),
+        pairings(),
+        apiRequest<PermissionRequests>('connection/permissions', 'PermissionRequests'),
+      ]);
+      profiles = options;
+      upgrades = permissions.requests;
+      apply(list);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) listening = false;
     }
@@ -67,6 +124,7 @@
       choices.includes(capability),
     );
     if (!selected.length) return;
+    if (profile[request.id] === 'full' && !window.confirm(t('ui_full_controller_help'))) return;
     action = 'approve';
     working = request.id;
     try {
@@ -111,10 +169,42 @@
   });
 </script>
 
-{#if requests.length}
+{#if requests.length || upgrades.length}
   <aside class="approvals" role="region" aria-labelledby="pairing-approvals-title">
     <h2 id="pairing-approvals-title">{t('ui_pending_pairing_requests')}</h2>
     <p class="help">{t('ui_pairing_requests_help')}</p>
+    {#each upgrades as upgrade (upgrade.id)}
+      <article>
+        <h3>{upgrade.device.name}</h3>
+        <p>{t('ui_permission_request_help')}</p>
+        <p>{upgrade.capabilities.map((c) => t(capabilityNames[c] ?? c)).join(', ')}</p>
+        <div class="actions">
+          <button
+            class="primary"
+            onclick={() =>
+              attempt(async () => {
+                await apiRequest(
+                  `connection/permissions/${encodeURIComponent(upgrade.id)}`,
+                  'PermissionRequests',
+                  { method: 'POST' },
+                );
+                await refresh();
+              })}>{t('ui_approve_device')}</button
+          >
+          <button
+            onclick={() =>
+              attempt(async () => {
+                await apiRequest(
+                  `connection/permissions/${encodeURIComponent(upgrade.id)}`,
+                  'PermissionRequests',
+                  { method: 'DELETE' },
+                );
+                await refresh();
+              })}>{t('ui_reject')}</button
+          >
+        </div>
+      </article>
+    {/each}
     {#each requests as request (request.id)}
       <article aria-busy={working === request.id}>
         <div class="who">
@@ -129,21 +219,18 @@
             ),
           })}
         </p>
-        <fieldset>
-          <legend>{t('ui_permissions')}</legend>{#each choices as capability (capability)}<label
-              class="check"
-            >
-              <input
-                type="checkbox"
-                checked={grants[request.id]?.includes(capability)}
-                onchange={(event) => toggle(request.id, capability, event.currentTarget.checked)}
-              />{t(capabilityNames[capability] ?? capability)}
-            </label>{/each}
-        </fieldset>
+        <PermissionProfiles
+          bind:selected={grants[request.id]!}
+          bind:profile={profile[request.id]!}
+          recommended={profiles?.recommended ?? ['read']}
+          full={choices}
+        />
         <p class="muted" id={`pair-grant-help-${request.id}`}>{t('ui_pair_grant_help')}</p>
         <label
           >{t('ui_expires_after')}<select bind:value={ttl}
-            ><option value={900}>{t('ui_15_minutes')}</option><option value={3600}
+            ><option value={900}>{t('ui_current_session')}</option><option value={2592000}
+              >{t('ui_30_days')}</option
+            ><option value={315360000}>{t('ui_until_revoked')}</option><option value={3600}
               >{t('ui_1_hour')}</option
             ><option value={28800}>{t('ui_8_hours')}</option><option value={86400}
               >{t('ui_1_day')}</option
@@ -229,7 +316,6 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.15em;
   }
-  fieldset,
   label {
     margin: 0;
   }

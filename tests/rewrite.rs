@@ -1219,3 +1219,216 @@ async fn phone_listener_binds_immediately_and_failed_changes_preserve_it() {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }
+
+#[tokio::test]
+async fn connection_management_and_permission_decisions_remain_local_only() {
+    let t = Temp::new();
+    let mut a = app(&t);
+    a.network = Some(Arc::new(
+        webdeck::network::Network::open(t.0.join("network.v2.json"), 5000, false).unwrap(),
+    ));
+    let grant = a
+        .sessions
+        .approve(DeviceRequest {
+            name: "Phone".into(),
+            capabilities: vec![Capability::Read, Capability::Settings],
+            ttl_seconds: 60,
+        })
+        .unwrap();
+    // Enable the gate without a secondary bind, using the external-listener test configuration.
+    let network = Arc::new(
+        webdeck::network::Network::open(t.0.join("external-network.json"), 5000, true).unwrap(),
+    );
+    a.network = Some(network.clone());
+    network
+        .apply(
+            a.clone(),
+            NetworkSettings {
+                enabled: true,
+                address: webdeck::network::suggested_address(),
+                port: 5000,
+            },
+        )
+        .await
+        .unwrap();
+    for (method, path, body) in [
+        ("GET", "/api/v2/connection/status".to_string(), json!(null)),
+        ("POST", "/api/v2/connection/start".to_string(), json!(null)),
+        (
+            "POST",
+            "/api/v2/connection/invitations".to_string(),
+            json!(null),
+        ),
+        (
+            "GET",
+            "/api/v2/connection/diagnostics".to_string(),
+            json!(null),
+        ),
+        (
+            "GET",
+            "/api/v2/connection/profiles".to_string(),
+            json!(null),
+        ),
+        (
+            "GET",
+            "/api/v2/connection/permissions".to_string(),
+            json!(null),
+        ),
+        ("GET", "/api/v2/devices/presence".to_string(), json!(null)),
+        (
+            "PATCH",
+            format!("/api/v2/devices/{}", grant.device.id),
+            json!({"name":"Phone","capabilities":["read"],"ttl_seconds":900}),
+        ),
+        (
+            "POST",
+            format!("/api/v2/devices/{}/renew", grant.device.id),
+            json!({"ttl_seconds":900}),
+        ),
+    ] {
+        assert_eq!(
+            call(
+                &a,
+                method,
+                &path,
+                body,
+                true,
+                Some(&grant.token),
+                "192.168.1.1:5000"
+            )
+            .await
+            .status(),
+            StatusCode::FORBIDDEN,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        call(
+            &a,
+            "GET",
+            "/api/v2/device/self",
+            json!(null),
+            true,
+            Some(&grant.token),
+            "192.168.1.1:5000"
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(
+            &a,
+            "POST",
+            "/api/v2/device/self/permissions",
+            json!({"capabilities":["admin"]}),
+            true,
+            Some(&grant.token),
+            "192.168.1.1:5000"
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    network.stop().await;
+}
+#[tokio::test]
+async fn automatic_connection_start_reuses_listener_and_falls_back_from_busy_port() {
+    let t = Temp::new();
+    let mut a = app(&t);
+    let address: std::net::IpAddr = webdeck::network::suggested_address().parse().unwrap();
+    let busy = tokio::net::TcpListener::bind((address, 0)).await.unwrap();
+    let port = busy.local_addr().unwrap().port();
+    std::fs::write(
+        t.0.join("network.v2.json"),
+        serde_json::to_vec(&NetworkSettings {
+            enabled: false,
+            address: address.to_string(),
+            port: port.into(),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let manager = Arc::new(
+        webdeck::network::Network::open(t.0.join("network.v2.json"), 5000, false).unwrap(),
+    );
+    a.network = Some(manager.clone());
+    manager.start(a.clone()).await.unwrap();
+    let first = manager.status().await;
+    assert_ne!(first.settings.port, u64::from(port));
+    manager.start(a.clone()).await.unwrap();
+    assert_eq!(manager.status().await.url, first.url);
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    assert_eq!(
+        client
+            .get(format!("{}api/v2/boot", first.url))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    manager.stop().await;
+    manager.stop().await;
+    assert!(!manager.enabled());
+}
+
+#[test]
+fn recommended_profile_collects_nested_commands_scripts_and_plugin_manifest_permissions() {
+    let t = Temp::new();
+    let mut a = app(&t);
+    let mut plugin: PluginManifest =
+        serde_json::from_str(include_str!("../examples/plugins/devices/webdeck.json")).unwrap();
+    plugin.actions[0].capabilities = vec![Capability::Read, Capability::Network, Capability::Power];
+    a.plugins = Arc::new(vec![plugin]);
+    let snapshot = a.config.snapshot().unwrap();
+    a.config
+        .mutate(snapshot.revision, |config| {
+            for folder in &mut config.layout.folders {
+                folder.buttons.clear();
+            }
+            config.layout.folders[0].buttons.push(Button {
+                id: "workflow-test".into(),
+                label: "Workflow".into(),
+                icon: "".into(),
+                color: "#000000".into(),
+                extensions: Default::default(),
+                action: ButtonAction::Command {
+                    command: Command::Workflow {
+                        workflow: Box::new(WorkflowNode::Sequence {
+                            steps: vec![
+                                Box::new(WorkflowNode::Script {
+                                    source: ScriptSource::Inline {
+                                        code: "return 1;".into(),
+                                    },
+                                }),
+                                Box::new(WorkflowNode::Command {
+                                    command: Command::Plugin {
+                                        plugin_id: "devices".into(),
+                                        version: "1.0.0".into(),
+                                        action_id: "discover".into(),
+                                        args: Default::default(),
+                                    },
+                                    references: None,
+                                }),
+                            ],
+                        }),
+                    },
+                },
+            });
+            Ok(())
+        })
+        .unwrap();
+    let profile = webdeck::connection::permissions::recommended(&a).unwrap();
+    for capability in [
+        Capability::Read,
+        Capability::Script,
+        Capability::Plugin,
+        Capability::Network,
+        Capability::Power,
+    ] {
+        assert!(profile.contains(&capability));
+    }
+    assert!(!profile.contains(&Capability::Admin));
+    assert!(!profile.contains(&Capability::Settings));
+}

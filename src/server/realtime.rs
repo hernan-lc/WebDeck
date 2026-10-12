@@ -30,16 +30,83 @@ async fn on_connect(app: App, socket: SocketRef, auth: Value) {
         Some(Value::String(t)) => Some(t.clone()),
         Some(_) => Some(String::new()),
     };
-    if authorize(&app, peer, token.clone()).await.is_err() {
-        let _ = socket.disconnect();
-        return;
-    }
+    let identity = match authorize(&app, peer, token.clone()).await {
+        Ok(identity) => identity,
+        Err(_) => {
+            let _ = socket.disconnect();
+            return;
+        }
+    };
+    let device_id = if let Some(credential) = token.clone() {
+        let sessions = app.sessions.clone();
+        match blocking(app.authorization.clone(), move || {
+            sessions.connected(&credential)
+        })
+        .await
+        {
+            Ok(id) => Some(id),
+            Err(_) => {
+                let _ = socket.disconnect();
+                return;
+            }
+        }
+    } else {
+        None
+    };
+    let stopping = Arc::new(tokio::sync::Notify::new());
+    let stop = stopping.clone();
+    let sessions = app.sessions.clone();
+    let disconnected_id = device_id.clone();
+    socket.on_disconnect(async move || {
+        if let Some(id) = disconnected_id {
+            sessions.disconnected(&id);
+            tokio::task::spawn_blocking(move || {
+                if sessions.persist_history().is_err() {
+                    eprintln!("Cannot save device connection history");
+                }
+            });
+        }
+        stop.notify_waiters();
+    });
+    let mut changes = app.sessions.subscribe();
+    let observer = socket.clone();
+    let owner = app.clone();
+    let credential = token.clone();
+    let cancelled = stopping.clone();
+    let local = identity.local;
+    tokio::spawn(async move {
+        let mut check = tokio::time::interval(std::time::Duration::from_secs(5));
+        loop {
+            tokio::select! {
+                _ = cancelled.notified() => break,
+                _ = check.tick() => {
+                    if !observer.connected() { break; }
+                    if let Err(error) = authorize(&owner, peer, credential.clone()).await {
+                        if matches!(error.code, ErrorCode::CapacityExhausted | ErrorCode::PersistenceFailed) { continue; }
+                        let event = if error.code == ErrorCode::DeviceRevoked { "device.revoked" } else { "device.authorization_expired" };
+                        let _ = observer.emit(event, &json!({"api_version":2}));
+                        let _ = observer.disconnect(); break;
+                    }
+                }
+                received = changes.recv() => {
+                    match received {
+                        Ok(event) => {
+                            let own = event.device_id.is_some() && event.device_id == device_id;
+                            if own && event.name == "device.revoked" { let _ = observer.emit(event.name, &event.value); let _ = observer.disconnect(); break; }
+                            if (local || own) && authorize(&owner, peer, credential.clone()).await.is_ok() { let _ = observer.emit(event.name, &event.value); }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => { let _ = observer.emit("connection.status", &json!({"resync":true})); }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
+    let _ = socket.emit(
+        "connection.status",
+        &json!({"api_version":2,"authenticated":true,"realtime_connected":true}),
+    );
     if let Some(mut events) = app.executor.events() {
-        let stopping = Arc::new(tokio::sync::Notify::new());
-        let stop = stopping.clone();
-        socket.on_disconnect(async move || {
-            stop.notify_one();
-        });
         let observer = socket.clone();
         let owner = app.clone();
         let credential = token.clone();

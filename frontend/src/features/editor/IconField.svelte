@@ -15,6 +15,7 @@
     class="trigger"
     aria-label={t('ui_icon')}
     aria-haspopup="dialog"
+    data-icon={value}
     onclick={() => (open = true)}
   >
     <Icon name={value.startsWith('asset:') ? 'image' : iconKey(value)} />

@@ -121,7 +121,7 @@ test('theme and image uploads, folder creation and settings round trip', async (
   await page.getByRole('button', { name: /Add button in cell/ }).first().click();
   await page.getByLabel('Label', { exact: true }).fill('Image button');
   await page.getByLabel('Upload image').setInputFiles(image);
-  await expect(page.getByLabel('Icon', { exact: true })).toHaveValue(/^asset:/);
+  await expect(page.getByRole('button', { name: 'Icon', exact: true })).toContainText('Use a custom image');
   await page.getByRole('button', { name: 'Apply to draft' }).click();
   await expect(page.getByRole('button', { name: 'Image button', exact: true }).locator('img')).toBeVisible();
   const unsaved = await (await page.request.get('/api/v2/config')).json();
@@ -164,7 +164,8 @@ test('typed realtime correlation, retired routes, revoked sessions and offline c
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
   await page.keyboard.press('Control+,');
-  await page.getByRole('tab', { name: 'Connection', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
+  await page.getByText('Advanced connection', { exact: true }).click();
   await page.locator('#settings-connection select').selectOption('socket');
   await expect(page.getByLabel('Realtime connection', { exact: true })).toHaveText('Connected');
   await page.getByRole('button', { name: 'Back to deck' }).click();
@@ -322,6 +323,7 @@ test('cancelled placement edits leave the draft and neighboring cells unchanged'
   const before = await settings.locator('..').getAttribute('data-cell');
   await page.keyboard.press('q');
   await page.getByRole('button', { name: 'Edit Play / pause' }).click();
+  await page.getByLabel('More button actions', { exact: true }).click();
   await page.getByRole('button', { name: 'Move right', exact: true }).click();
   await cancelButtonEditor(page);
   await expect(settings.locator('..')).toHaveAttribute('data-cell', before!);
@@ -602,7 +604,8 @@ test('saving Spanish updates controls and action names while preserving configur
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Configuración', exact: true })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-  await page.getByRole('tab', { name: 'Dispositivos', exact: true }).click();
+  await page.getByRole('tab', { name: 'Dispositivos y conexiones', exact: true }).click();
+  await page.locator('#settings-devices summary').click();
   await expect(page.getByRole('checkbox', { name: 'Ver el panel y las mediciones', exact: true })).toBeVisible();
   const snapshot = await (await request.get('/api/v2/config')).json();
   expect(snapshot.config.settings.language).toBe('es_ES');
@@ -623,9 +626,10 @@ test('pairing retains failed credentials and meets automated accessibility check
   await page.addInitScript(() => sessionStorage.setItem('webdeck.device', 'invalid-pairing-token'));
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Connect your device', exact: true })).toBeVisible();
+  await page.getByText('Use a pairing token instead', { exact: true }).click();
   await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toHaveAccessibleDescription(/On the host computer/);
-  await expect(page.getByLabel('Pairing token', { exact: true })).toHaveAccessibleDescription(/one-time pairing token/);
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toHaveAccessibleDescription(/one-time token/);
+  await expect(page.getByLabel('Pairing token', { exact: true })).toHaveAccessibleDescription(/one-time token/);
   await captureState(page, testInfo, 'pairing');
   await page.getByLabel('Pairing token', { exact: true }).fill('recoverable-invalid-token');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -672,7 +676,8 @@ test('a delayed token copy cannot clear a newer device approval', async ({ page 
       }) },
     });
   });
-  await page.getByRole('tab', { name: 'Devices', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
+  await page.locator('#settings-devices summary').click();
   await page.getByLabel('Device name', { exact: true }).fill('First approval');
   await page.getByRole('button', { name: 'Approve device', exact: true }).click();
   const token = page.locator('#settings-devices .token');
@@ -680,7 +685,7 @@ test('a delayed token copy cannot clear a newer device approval', async ({ page 
   const first = await token.textContent();
   await page.getByRole('button', { name: 'Copy token', exact: true }).click();
   await expect.poll(() => page.evaluate(() => typeof Reflect.get(window, 'finishTokenCopy'))).toBe('function');
-  await page.getByRole('tab', { name: 'Devices', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
   await page.getByLabel('Device name', { exact: true }).fill('Second approval');
   await page.getByRole('button', { name: 'Approve device', exact: true }).click();
   await expect(token).not.toHaveText(first!);
@@ -755,6 +760,7 @@ test('cancelling span and collision edits preserves the full draft and host revi
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   await page.getByLabel('Column span', { exact: true }).fill('3');
   await page.getByLabel('Row span', { exact: true }).fill('3');
+  await page.getByLabel('More button actions', { exact: true }).click();
   await page.getByRole('button', { name: 'Move right', exact: true }).click();
   await cancelButtonEditor(page);
   await expect(tile).toHaveAttribute('data-cell', '0');
@@ -928,7 +934,7 @@ test('keyboard-only editing saves a staged button with reduced motion and restor
     if (request.method() === 'POST' && request.url().endsWith('/api/v2/commands')) commands++;
   });
   const tabTo = async (target: ReturnType<Page['getByRole']>) => {
-    for (let step = 0; step < 60; step++) {
+    for (let step = 0; step < 120; step++) {
       if (await target.evaluate(element => element === document.activeElement)) return;
       await page.keyboard.press('Tab');
     }
@@ -1057,8 +1063,9 @@ test('device loading failures stay distinct from an empty list and support retry
   await page.getByRole('button', { name: 'Play / pause', exact: true }).waitFor();
   await page.keyboard.press('Control+,');
   await pending;
-  await page.getByRole('tab', { name: 'Devices', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
   const devices = page.locator('#settings-devices');
+  await devices.locator('summary').click();
   await expect(devices.getByRole('button', { name: 'Approve device' })).toBeDisabled();
   await expect(devices.getByRole('button', { name: 'Approve device' })).toHaveAccessibleDescription('Enter a device name and select at least one permission to approve it.');
   await expect(devices.getByRole('status')).toHaveText('Loading devices…');
@@ -1219,6 +1226,7 @@ test('touch dialog controls retain a 44 pixel target in both dimensions', async 
     await page.getByRole('button', { name: 'Edit Play / pause', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Edit button', exact: true });
     await expect(dialog).toBeVisible();
+    await dialog.getByLabel('More button actions', { exact: true }).click();
     for (const name of ['Close editor', 'Apply to draft', 'Cancel', 'Delete']) {
       const bounds = await dialog.getByRole('button', { name, exact: true }).boundingBox();
       expect(bounds?.width).toBeGreaterThanOrEqual(44);
@@ -1425,11 +1433,13 @@ test('mobile settings navigation reaches its sections and keeps transport in adv
   await page.getByRole('button', { name: 'Play / pause', exact: true }).waitFor();
   await page.keyboard.press('Control+,');
   const navigation = page.getByRole('tablist', { name: 'Settings sections', exact: true });
-  await expect(navigation.getByRole('tab')).toHaveCount(6);
+  await expect(navigation.getByRole('tab')).toHaveCount(5);
   await navigation.getByRole('tab', { name: 'Backups', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Backups', exact: true })).toBeInViewport();
-  await navigation.getByRole('tab', { name: 'Connection', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Advanced connection', exact: true })).toBeInViewport();
+  await navigation.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
+  await page.getByText('Advanced connection', { exact: true }).click();
+  await page.getByText('Advanced connection', { exact: true }).scrollIntoViewIfNeeded();
+  await expect(page.getByText('Advanced connection', { exact: true })).toBeInViewport();
   await expect(page.locator('#settings-connection').getByRole('combobox', { name: 'Connection', exact: true })).toBeVisible();
   await expect(page.locator('#settings-appearance').getByRole('combobox', { name: 'Connection', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -1441,7 +1451,7 @@ test('pending device revocation explains its disabled state and becomes visibly 
   await page.goto('/');
   await page.getByRole('button', { name: 'Play / pause', exact: true }).waitFor();
   await page.keyboard.press('Control+,');
-  await page.getByRole('tab', { name: 'Devices', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
   const row = page.locator('#settings-devices .row').filter({ hasText: 'Revoke description' });
   const revoke = row.getByRole('button', { name: 'Revoke', exact: true });
   let release!: () => void;
@@ -1489,7 +1499,7 @@ test('touch settings controls expose usable targets including checkbox labels an
     await page.keyboard.press('Control+,');
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
     const targets = [];
-    for (const tab of ['Appearance', 'Integrations', 'Devices', 'Backups', 'Runtime and plugins', 'Connection']) {
+    for (const tab of ['Appearance', 'Integrations', 'Devices & Connections', 'Backups', 'Runtime and plugins']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     targets.push(...await page.locator('main').evaluate(main => Array.from(main.querySelectorAll('button,input,select,textarea,nav a')).filter(element => {
       const rect = element.getBoundingClientRect();
@@ -1568,9 +1578,12 @@ test('icon registry search and uploaded icon reuse persist through reload', asyn
   await page.keyboard.press('q');
   await page.getByRole('button', { name: 'Edit Play / pause' }).click();
   const dialog = page.getByRole('dialog', { name: 'Edit button' });
-  await dialog.getByLabel('Search icons', { exact: true }).fill('camera');
-  await dialog.getByRole('button', { name: 'camera', exact: true }).click();
-  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveValue('icon:camera');
+  await dialog.getByRole('button', { name: 'Icon', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: 'Select icon', exact: true });
+  await picker.getByLabel('Search icons', { exact: true }).fill('camera');
+  await picker.getByRole('option', { name: 'camera', exact: true }).click();
+  await picker.getByRole('button', { name: 'Select', exact: true }).click();
+  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveAttribute('data-icon', 'icon:camera');
   await dialog.getByLabel('Upload image', { exact: true }).setInputFiles({
     name: 'custom-icon.svg',
     mimeType: 'image/svg+xml',
@@ -1578,8 +1591,8 @@ test('icon registry search and uploaded icon reuse persist through reload', asyn
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="red"/></svg>',
     ),
   });
-  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveValue(/^asset:/);
-  const savedIcon = await dialog.getByLabel('Icon', { exact: true }).inputValue();
+  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveAttribute('data-icon', /^asset:/);
+  const savedIcon = (await dialog.getByLabel('Icon', { exact: true }).getAttribute('data-icon'))!;
   await dialog.getByRole('button', { name: 'Apply to draft' }).click();
   await page.getByRole('button', { name: /^Save( changes)?$/, exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Saved/ })).toBeVisible();
@@ -1587,11 +1600,12 @@ test('icon registry search and uploaded icon reuse persist through reload', asyn
   await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
   await page.keyboard.press('q');
   await page.getByRole('button', { name: 'Edit CPU' }).click();
+  await page.getByRole('dialog').getByText('Use a custom image', { exact: true }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: `Select uploaded icon ${savedIcon.slice(6)}`, exact: true })
     .click();
-  await expect(page.getByRole('dialog').getByLabel('Icon', { exact: true })).toHaveValue(savedIcon);
+  await expect(page.getByRole('dialog').getByLabel('Icon', { exact: true })).toHaveAttribute('data-icon', savedIcon);
   await page.getByRole('button', { name: 'Apply to draft' }).click();
   await page.getByRole('button', { name: /^Save( changes)?$/, exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Saved/ })).toBeVisible();
@@ -1610,10 +1624,12 @@ test('local imports survive removal of the source file and URL imports offer liv
   await page.keyboard.press('q');
   await page.getByRole('button', { name: 'Edit Play / pause' }).click();
   const dialog = page.getByRole('dialog', { name: 'Edit button' });
+  await dialog.getByText('Use a custom image', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Local file', exact: true }).click();
   await dialog.getByLabel('Local image path on this server', { exact: true }).fill(sourcePath);
   await dialog.getByRole('button', { name: 'Import local image', exact: true }).click();
-  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveValue(/^asset:/);
-  const icon = await dialog.getByLabel('Icon', { exact: true }).inputValue();
+  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveAttribute('data-icon', /^asset:/);
+  const icon = (await dialog.getByLabel('Icon', { exact: true }).getAttribute('data-icon'))!;
   const id = icon.slice(6);
   rmSync(sourcePath);
   expect((await request.get(`/api/v2/assets/${id}`)).ok()).toBeTruthy();
@@ -1629,6 +1645,7 @@ test('local imports survive removal of the source file and URL imports offer liv
     refreshes++;
     await route.fulfill({ json: { type: 'asset', id } });
   });
+  await dialog.getByRole('button', { name: 'Image URL', exact: true }).click();
   await dialog.getByLabel('Image URL', { exact: true }).fill('https://images.example/icon.svg');
   await dialog.getByLabel('Keep URL for manual refresh', { exact: true }).check();
   await dialog.getByRole('button', { name: 'Import image URL', exact: true }).click();
@@ -1637,7 +1654,7 @@ test('local imports survive removal of the source file and URL imports offer liv
   await dialog.getByRole('button', { name: 'Refresh live image', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Refresh live image', exact: true })).toBeEnabled();
   expect(refreshes).toBe(1);
-  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveValue(icon);
+  await expect(dialog.getByLabel('Icon', { exact: true })).toHaveAttribute('data-icon', icon);
   await dialog.getByRole('button', { name: 'Apply to draft' }).click();
   await page.getByRole('button', { name: /^Save( changes)?$/, exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Saved/ })).toBeVisible();
@@ -1721,7 +1738,8 @@ test('local phone settings apply immediately and refresh QR without leaving sett
   const detected = await (await request.get('/api/v2/network')).json();
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('tab', { name: 'Connection', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
+  await page.getByText('Advanced connection', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Phone access', exact: true })).toBeVisible();
   await page.getByLabel('Allow phones on my local network').check();
   await page.getByRole('button', { name: 'Use detected address', exact: true }).click();
@@ -1739,10 +1757,11 @@ test('local phone settings apply immediately and refresh QR without leaving sett
   await expect(qr).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Connection', exact: true }).click();
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
+  await page.getByText('Advanced connection', { exact: true }).click();
   await expect(page.getByLabel('Allow phones on my local network')).toBeChecked();
   await page.getByLabel('Allow phones on my local network').uncheck();
   await page.getByRole('button', { name: 'Apply phone access', exact: true }).click();
   await expect(qr).toHaveCount(0);
-  await expect(page.getByText('Phone access is off. Only this computer can use the deck.')).toBeVisible();
+  await expect(page.getByText('Phone access is off. Only this computer can use the deck.').last()).toBeVisible();
 });

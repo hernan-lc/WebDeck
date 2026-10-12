@@ -22,7 +22,7 @@ Dirty state compares the JSON-shaped draft with a cloned persisted baseline on e
 
 Folder and Back tiles navigate during editing; their existing pencil remains available, including on touch pointers, to edit the link itself. Other tiles retain their existing editing behavior. Empty grid cells are the only button-creation entry point; saved positions, spans and grid fitting are unchanged.
 
-Generic schema fields keep numeric, JSON and identifier-pattern errors beside their controls and expose those errors through accessible descriptions. Invalid input blocks Apply until corrected. Schema array fields show translated minimum/maximum item guidance and associate it with Remove/Add controls. Device rows expose Approved, Revoking and Revoked state; pairing describes where to obtain a token and retains it after a recoverable failure.
+Generic schema fields keep numeric, JSON and identifier-pattern errors beside their controls and expose those errors through accessible descriptions. Invalid input blocks Apply until corrected. Schema array fields show translated minimum/maximum item guidance and associate it with Remove/Add controls. Devices & Connections shows authenticated online presence, grant expiry and management actions. Invitation pairing is automatic after scanning a QR; manual token pairing remains in Advanced and retains recoverable input after a failure.
 
 
 ## Contextual command bar

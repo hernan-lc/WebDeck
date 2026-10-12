@@ -21,19 +21,27 @@ Open `http://127.0.0.1:5000/` on the host computer. If a port is busy, use `--po
 
 Closing a changed button editor asks whether to keep editing or discard that button draft. It does not discard changes already applied to the deck. Going to another folder or Settings preserves the deck draft. Reloading an unsaved configuration asks separately before replacing it.
 
-Touch decks scroll vertically so their labels and touch targets remain readable. Turn the device to change the visual orientation; saved cell coordinates are not rewritten. Use Settings tabs for appearance, integrations, devices, backups, runtime and connection.
+Touch decks scroll vertically so their labels and touch targets remain readable. Turn the device to change the visual orientation; saved cell coordinates are not rewritten. Use Settings tabs for appearance, integrations, devices and connections, backups, and runtime.
 
 ## Pair a phone or tablet
 
-On the computer, open **Settings → Connection → Phone access**, enable
-**Allow phones on my local network**, use the detected address, and click
-**Apply phone access**. The address and QR appear immediately; no launch arguments
-or restart are required. Then open **Settings → Devices**, name the controller,
-and grant the capabilities its buttons need (`network` for OBS). Scan the QR on
-the phone and enter its pairing token. Use a trusted local network and revoke
-temporary approvals when testing is complete. See
-[phone access and hot reload](../README.md#phone-access-and-hot-reload) for firewall
-troubleshooting, frontend development and changing the QR address.
+1. Open WebDeck on your computer.
+2. Click **Connect Device**.
+3. Scan the QR on your phone or tablet.
+4. Compare the displayed code and approve your phone on the computer.
+5. Start controlling WebDeck.
+
+The wizard enables local-network access and selects the address and port. Approve
+only devices you recognize. Temporary access lasts 15 minutes; personal devices
+can be trusted for 30 days or until revoked. Remembered access is restored on
+reload and after temporary network loss. **Settings → Devices & Connections**
+lets you manage devices, renew access, and revoke them. Permission requests require
+host approval and never replay a denied action.
+
+Use a trusted network: HTTP traffic is visible to network observers. For advanced
+network overrides and firewall troubleshooting, expand **Advanced connection** or
+see [connections](v2/CONNECTIONS.md). If your computer's address changes, scan a new
+QR; browsers store credentials separately for each address and port.
 
 ## Backups and upgrades
 

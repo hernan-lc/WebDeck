@@ -7,8 +7,9 @@ pub(super) async fn request(
     domain::validate("PairingRequest", &value)?;
     let r: PairingRequest = serde_json::from_value(value).map_err(|_| Error::invalid())?;
     Ok(Json(
-        blocking(a.authorization.clone(), move || {
-            a.sessions.request_pairing(r.name, peer.ip())
+        blocking(a.authorization.clone(), move || match r.invitation {
+            Some(invitation) => a.sessions.invited_pairing(&invitation, r.name, peer.ip()),
+            None => a.sessions.request_pairing(r.name, peer.ip()),
         })
         .await?,
     ))

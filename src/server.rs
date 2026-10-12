@@ -1,4 +1,5 @@
 mod auth;
+mod connection;
 mod frontend;
 mod network;
 use auth::*;
@@ -71,7 +72,9 @@ async fn blocking<T: Send + 'static>(
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let status = match self.code {
-            ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
+            ErrorCode::Unauthorized
+            | ErrorCode::AuthorizationExpired
+            | ErrorCode::DeviceRevoked => StatusCode::UNAUTHORIZED,
             ErrorCode::Forbidden => StatusCode::FORBIDDEN,
             ErrorCode::Conflict => StatusCode::CONFLICT,
             ErrorCode::CapacityExhausted => StatusCode::TOO_MANY_REQUESTS,
@@ -92,6 +95,42 @@ pub fn router(a: App) -> Router {
         .route("/api/v2/version", get(version))
         .route("/api/v2/network", get(network::status).put(network::apply))
         .route("/api/v2/network/qr", get(network::qr))
+        .route("/api/v2/connection/status", get(connection::status))
+        .route("/api/v2/connection/diagnostics", get(connection::status))
+        .route("/api/v2/connection/start", post(connection::start))
+        .route(
+            "/api/v2/connection/invitations",
+            post(connection::invitation),
+        )
+        .route(
+            "/api/v2/connection/invitations/{id}",
+            get(connection::progress).delete(connection::cancel),
+        )
+        .route(
+            "/api/v2/connection/invitations/{id}/qr",
+            get(connection::qr),
+        )
+        .route("/api/v2/device/self", get(device_self))
+        .route(
+            "/api/v2/device/self/permissions",
+            post(connection::permission_request),
+        )
+        .route(
+            "/api/v2/device/self/permissions/{id}",
+            get(connection::permission_progress),
+        )
+        .route("/api/v2/connection/profiles", get(connection::profiles))
+        .route(
+            "/api/v2/connection/permissions",
+            get(connection::permissions),
+        )
+        .route(
+            "/api/v2/connection/permissions/{id}",
+            post(connection::approve_permission).delete(connection::reject_permission),
+        )
+        .route("/api/v2/devices/presence", get(presence))
+        .route("/api/v2/devices/{id}/permissions", post(update))
+        .route("/api/v2/devices/{id}/renew", post(renew))
         .route("/api/v2/settings/boot", get(config))
         .route("/api/v2/config", get(config).put(replace))
         .route("/api/v2/settings", axum::routing::put(settings))
@@ -123,7 +162,7 @@ pub fn router(a: App) -> Router {
         .route("/api/v2/pairing", get(pairing::pending))
         .route("/api/v2/pairing/{id}/approve", post(pairing::accept))
         .route("/api/v2/pairing/{id}", delete(pairing::reject))
-        .route("/api/v2/devices/{id}", delete(revoke))
+        .route("/api/v2/devices/{id}", delete(revoke).patch(update))
         .route("/api/v2/assets", get(image_assets).post(upload))
         .route("/api/v2/assets/{id}", get(asset))
         .route("/api/v2/assets/import", post(import_image))

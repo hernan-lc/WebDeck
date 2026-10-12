@@ -14,6 +14,8 @@
     error = $state('');
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
+  let invitation = '';
+  let invitationRequest: Promise<void> | undefined;
   onDestroy(() => {
     destroyed = true;
     clearTimeout(timer);
@@ -64,7 +66,7 @@
     try {
       const value = await request<PairingChallenge>('pairing/request', 'PairingChallenge', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: name.trim(), ...(invitation ? { invitation } : {}) }),
       });
       if (destroyed) return;
       challenge = value;
@@ -91,6 +93,11 @@
     }
   }
   onMount(() => {
+    if (!name) name = t('ui_phone_name_example');
+    const fragment = new URLSearchParams(location.hash.slice(1));
+    invitation = fragment.get('connect') ?? '';
+    if (invitation) history.replaceState(null, '', location.pathname + location.search);
+
     try {
       const saved = sessionStorage.getItem('webdeck.pairing');
       if (saved) {
@@ -103,6 +110,7 @@
     } catch {
       clearRequest();
     }
+    if (invitation && !challenge && !invitationRequest) invitationRequest = ask();
   });
 </script>
 
@@ -146,17 +154,21 @@
   {/if}
   <details>
     <summary>{t('ui_use_pairing_token')}</summary>
-    <p>{t('ui_manual_pair_help')}</p>
+    <p id="manual-pair-help">{t('ui_manual_pair_help')}</p>
     <form onsubmit={submit}>
       <label
         >{t('ui_pairing_token')}<input
           type="password"
           bind:value={credential}
+          aria-describedby="manual-pair-help"
           autocomplete="off"
           required
         /></label
       >
-      <button class="primary" disabled={working || !credential.trim()}
+      <button
+        class="primary"
+        aria-describedby="manual-pair-help"
+        disabled={working || !credential.trim()}
         >{working ? t('ui_connecting') : t('ui_connect')}</button
       >
     </form>

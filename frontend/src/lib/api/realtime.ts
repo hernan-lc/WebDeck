@@ -3,6 +3,13 @@ import type { Command, CommandEvent, RuntimeEvent } from '../contracts';
 import { contract } from '../schema';
 import { credential, request } from './http';
 import { id } from '../id';
+const deviceListeners = new Set<(event: string) => void>();
+export function onDeviceEvent(listener: (event: string) => void) {
+  deviceListeners.add(listener);
+  return () => {
+    deviceListeners.delete(listener);
+  };
+}
 const eventListeners = new Set<(event: RuntimeEvent) => void>();
 export function onRuntimeEvent(listener: (event: RuntimeEvent) => void) {
   eventListeners.add(listener);
@@ -29,6 +36,7 @@ type Pending = {
 };
 const pending = new Map<string, Pending>();
 export function disconnect() {
+  socket?.removeAllListeners();
   socket?.disconnect();
   socket = undefined;
   reportConnection(false);
@@ -40,7 +48,24 @@ export function disconnect() {
 }
 export function connect() {
   if (socket) return;
-  socket = io('/v2', { auth: credential() ? { token: credential() } : {}, autoConnect: false });
+  socket = io('/v2', {
+    auth: credential() ? { token: credential() } : {},
+    autoConnect: false,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 30000,
+    randomizationFactor: 0.3,
+  });
+  for (const event of [
+    'device.permissions_changed',
+    'device.revoked',
+    'device.authorization_expired',
+    'pairing.requested',
+    'pairing.approved',
+    'pairing.rejected',
+    'device.permission_requested',
+  ]) {
+    socket.on(event, () => deviceListeners.forEach((listener) => listener(event)));
+  }
   socket.on('connect', () => reportConnection(true));
   socket.on('connect_error', () => reportConnection(false));
   socket.on('runtime_event', (value: unknown) => {

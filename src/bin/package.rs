@@ -27,14 +27,13 @@ fn collect(root: &Path) -> io::Result<Vec<PathBuf>> {
 }
 fn main() -> io::Result<()> {
     let dev = Args::parse().dev;
-    if dev {
-        if !Command::new(if cfg!(windows) { "npm.cmd" } else { "npm" })
+    if dev
+        && !Command::new(if cfg!(windows) { "npm.cmd" } else { "npm" })
             .args(["--prefix", "frontend", "run", "build"])
             .status()?
             .success()
-        {
-            return Err(io::Error::other("Frontend build failed"));
-        }
+    {
+        return Err(io::Error::other("Frontend build failed"));
     }
     let mut build = Command::new("cargo");
     build.args(["build", "--locked", "--bins"]);
