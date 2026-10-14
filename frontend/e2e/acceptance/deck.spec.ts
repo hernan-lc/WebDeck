@@ -565,7 +565,17 @@ test('long translations and missing keys remain usable at 200 percent browser zo
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Play / pause', exact: true })).toBeVisible();
   expect(await page.evaluate(() => devicePixelRatio)).toBe(2);
-  expect(await page.evaluate(() => innerWidth)).toBe(360);
+  // --window-size includes native borders (16px on the Windows runner).
+  // Resize the real window to obtain 360 CSS pixels at the actual 200% zoom.
+  const capture = await context.newCDPSession(page);
+  const { windowId, bounds } = await capture.send('Browser.getWindowForTarget');
+  const viewportWidth = await page.evaluate(() => innerWidth);
+  expect(bounds.width).toBeDefined();
+  await capture.send('Browser.setWindowBounds', {
+    windowId,
+    bounds: { width: bounds.width! + (360 - viewportWidth) * 2 },
+  });
+  await expect.poll(() => page.evaluate(() => innerWidth)).toBe(360);
   await expect(page.locator('html')).toHaveAttribute('lang', 'de');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Diese ausführlichen Hinweise habe ich jetzt verstanden' }).click();
@@ -576,7 +586,6 @@ test('long translations and missing keys remain usable at 200 percent browser zo
   await page.keyboard.press('F1');
   await expect(page.locator('dialog[open]')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'Edit button', exact: true })).toBeVisible();
-  const capture = await context.newCDPSession(page);
   const zoomScreenshot = async (name: string) => { const { data } = await capture.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false }); writeFileSync(testInfo.outputPath(name), Buffer.from(data, 'base64')); };
   await zoomScreenshot('translated-editor-200-percent.png');
   await page.getByRole('button', { name: 'Apply to draft', exact: true }).scrollIntoViewIfNeeded();
