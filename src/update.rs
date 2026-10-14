@@ -238,7 +238,14 @@ pub fn install_with(
             let original = backup.join("original").join(&rel);
             fs::create_dir_all(original.parent().ok_or_else(invalid)?)?;
             fs::copy(&live, &original)?;
-            fs::File::open(original)?.sync_all()?;
+            // Windows FlushFileBuffers requires a handle opened for writing.
+            // Unix can flush a read-only handle, preserving support for files
+            // whose original permissions do not allow writing.
+            fs::OpenOptions::new()
+                .read(true)
+                .write(cfg!(windows))
+                .open(original)?
+                .sync_all()?;
         }
         entries.push(Entry {
             path: rel.to_string_lossy().replace('\\', "/"),

@@ -126,14 +126,15 @@ fn interrupted_install_restores_all_originals_and_removes_new_files() {
     )
     .unwrap();
     let backup = root.path().join("backup");
-    assert!(
-        install_with(&staged, &live, &backup, |index, _| if index == 2 {
+    let error = install_with(&staged, &live, &backup, |index, _| {
+        if index == 2 {
             Err(io::Error::other("interruption"))
         } else {
             Ok(())
-        })
-        .is_err()
-    );
+        }
+    })
+    .unwrap_err();
+    assert_eq!(error.to_string(), "interruption");
     assert_eq!(std::fs::read(live.join(executable_name())).unwrap(), b"old");
     assert!(!live.join("frontend/dist/index.html").exists());
     assert!(!live.join("webdeck/config_default.json").exists());
