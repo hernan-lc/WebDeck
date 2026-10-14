@@ -21,6 +21,12 @@ Validation hosts use shared cleanup that recognizes both ordinary and signal
 exits, subscribes before termination, and bounds graceful and forced shutdown.
 Process-cleanup regression tests run in both native CI jobs.
 
+Acceptance tests start a fresh native host on a reserved port for each test.
+Configuration, uploads, devices, sessions, and request rate limits therefore do
+not leak between tests. Production rate limits are unchanged. This isolation
+allows two parallel browser workers, including the device-emulation suite.
+Tests that reload after editing first wait for the completed save state.
+
 Dispatch `ci` on the same revision with `fast_linkers` disabled and enabled to
 compare Linux's default linker against clang/mold. Set `windows_lld` false and
 true to compare MSVC against detected `lld-link`. Both tools have availability

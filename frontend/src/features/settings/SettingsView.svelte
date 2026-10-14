@@ -115,7 +115,9 @@
     aria-labelledby="tab-runtime"
     hidden={activeTab !== 'runtime'}
   >
-    <RuntimeSettings {attempt} {reload} />
+    {#if activeTab === 'runtime'}
+      <RuntimeSettings {attempt} {reload} />
+    {/if}
   </div>
   <div
     role="tabpanel"

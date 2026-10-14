@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { stopChild } from '../../../tools/validation/child-process.mjs';
+import { test, expect } from './fixtures';
 test('QR invitation connects a separate phone, remembers trust, recovers Wi-Fi and revokes immediately', async ({ page, browser, request }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Connect Device', exact: true }).click();
@@ -14,7 +15,7 @@ test('QR invitation connects a separate phone, remembers trust, recovers Wi-Fi a
   expect(await mobile.evaluate(() => location.hash)).toBe('');
   const code = await mobile.locator('.pair-code').textContent();
   const approval = page.locator('.approvals article').filter({ hasText: code!.trim() });
-  await expect(approval).toBeVisible();
+  await expect(approval).toBeVisible({ timeout: 10000 });
   await approval.getByLabel('Expires after').selectOption('2592000');
   await approval.getByRole('button', { name: 'Approve device', exact: true }).click();
   await expect(mobile.getByRole('button', { name: 'Play / pause', exact: true })).toBeVisible();
@@ -84,7 +85,6 @@ test('view-only phone requests permission, host approves, and a new action attem
 test('trusted phone reconnects after the host process restarts without another approval', async ({ browser, request }) => {
   test.setTimeout(90000);
   const { spawn } = await import('node:child_process');
-  const { once } = await import('node:events');
   const { createServer } = await import('node:net');
   const { mkdtempSync, cpSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
@@ -94,13 +94,13 @@ test('trusted phone reconnects after the host process restarts without another a
   await new Promise<void>((resolve) => reservation.close(() => resolve()));
   const root = path.resolve('..'), directory = mkdtempSync(path.join(tmpdir(), 'webdeck-reconnect-'));
   cpSync(path.join(root, 'examples/demo-v2/user_uploads'), path.join(directory, 'user_uploads'), { recursive: true });
-  const executable = process.env.WEBDECK_ACCEPTANCE_BINARY ?? path.join(root, 'target/debug/webdeck');
+  const executable = process.env.WEBDECK_ACCEPTANCE_BINARY ?? path.join(root, 'target/debug/webdeck' + (process.platform === 'win32' ? '.exe' : ''));
   let child: ReturnType<typeof spawn> | undefined;
   const start = async () => {
     child = spawn(executable, ['--no-tray', '--port', String(port), '--config-dir', directory], { cwd: root, env: { ...process.env, WEBDECK_FAKE_EFFECTS: '1' }, stdio: 'ignore' });
     await expect.poll(async () => { try { return (await request.get(`http://127.0.0.1:${port}/api/v2/boot`)).status(); } catch { return 0; } }, { timeout: 20000 }).toBe(200);
   };
-  const stop = async () => { if (child && child.exitCode === null) { const exit = once(child, 'exit'); child.kill('SIGINT'); await exit; } };
+  const stop = async () => { await stopChild(child); };
   const phone = await browser.newContext();
   try {
     await start();

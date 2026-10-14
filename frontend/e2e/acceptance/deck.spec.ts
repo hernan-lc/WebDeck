@@ -1,4 +1,4 @@
-import { test, expect, chromium, type Page, type TestInfo, type BrowserContext } from '@playwright/test';
+import { test, expect, chromium, type Page, type TestInfo, type BrowserContext } from './fixtures';
 import { io } from 'socket.io-client';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -108,6 +108,7 @@ test('theme and image uploads, folder creation and settings round trip', async (
   await page.getByLabel('Columns', { exact: true }).fill('3');
   await page.getByRole('button', { name: /^Save( changes)?$/, exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Saved/ })).toBeVisible();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: 'Back to deck' }).click();
   await expect(page.locator('.deck-grid')).toHaveCSS('--test-theme', 'loaded');
@@ -115,6 +116,7 @@ test('theme and image uploads, folder creation and settings round trip', async (
   await page.keyboard.press('q');
   await createFolder(page, 'Studio');
   await page.getByRole('button', { name: /^Save( changes)?$/, exact: true }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Studio', exact: true })).toBeVisible();
   await page.keyboard.press('q');
@@ -128,6 +130,7 @@ test('theme and image uploads, folder creation and settings round trip', async (
   expect(unsaved.config.layout.folders.flatMap((folder: { buttons: { label: string }[] }) => folder.buttons)
     .some((button: { label: string }) => button.label === 'Image button')).toBe(false);
   await page.getByRole('button', { name: /^Save( changes)?$/ }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
   await page.reload();
 
   await expect(
@@ -137,8 +140,9 @@ test('theme and image uploads, folder creation and settings round trip', async (
 test('typed realtime correlation, retired routes, revoked sessions and offline commands', async ({
   page,
   request,
+  baseURL,
 }, testInfo) => {
-  const socket = io('http://127.0.0.1:59996/v2', { auth: {}, reconnection: false });
+  const socket = io(`${baseURL}/v2`, { auth: {}, reconnection: false });
   try {
     await new Promise<void>((resolve, reject) => {
       socket.once('connect', () => resolve());
@@ -543,7 +547,7 @@ test('shortcut controls stage typed keys and deletion undo restores a duplicate'
 });
 
 
-test('long translations and missing keys remain usable at 200 percent browser zoom', async ({}, testInfo) => {
+test('long translations and missing keys remain usable at 200 percent browser zoom', async ({ baseURL }, testInfo) => {
   const profile = mkdtempSync(path.join(tmpdir(), 'webdeck-zoom-'));
   mkdirSync(path.join(profile, 'Default'));
   // Chromium stores default zoom by storage partition; x is the default profile partition.
@@ -551,7 +555,7 @@ test('long translations and missing keys remain usable at 200 percent browser zo
   const launch = testInfo.project.use.launchOptions ?? {};
   let context: BrowserContext | undefined;
   try {
-  context = await chromium.launchPersistentContext(profile, { ...launch, ...(launch.executablePath ? {} : { channel: 'chromium' }), headless: true, viewport: null, args: [...(launch.args ?? []), '--window-size=720,1000'], baseURL: 'http://127.0.0.1:59996' });
+  context = await chromium.launchPersistentContext(profile, { ...launch, ...(launch.executablePath ? {} : { channel: 'chromium' }), headless: true, viewport: null, args: [...(launch.args ?? []), '--window-size=720,1000'], baseURL });
   const page = context.pages()[0] ?? await context.newPage();
   const settingsTitle = 'Ausführliche Einstellungen für dieses gemeinsam verwendete Steuerungsdeck';
   const saveLabel = 'Alle vorgenommenen Änderungen auf diesem Computer speichern';
@@ -649,8 +653,8 @@ test('pairing retains failed credentials and meets automated accessibility check
   expect(review.violations.map(({ id, nodes }) => ({ id, targets: nodes.map((node) => node.target) }))).toEqual([]);
 });
 
-test('native touch hold and release opens controls without executing a command', async ({ browser }, testInfo) => {
-  const context = await browser.newContext({ viewport: { width: 360, height: 900 }, isMobile: true, hasTouch: true, baseURL: 'http://127.0.0.1:59996' });
+test('native touch hold and release opens controls without executing a command', async ({ browser, baseURL }, testInfo) => {
+  const context = await browser.newContext({ viewport: { width: 360, height: 900 }, isMobile: true, hasTouch: true, baseURL });
   try {
     const page = await context.newPage();
     let executions = 0;
@@ -1214,7 +1218,7 @@ test('the final supported cell remains visible in a partial row without changing
 });
 
 
-test('touch dialog controls retain a 44 pixel target in both dimensions', async ({ browser, request }) => {
+test('touch dialog controls retain a 44 pixel target in both dimensions', async ({ browser, request, baseURL }) => {
   const snapshot = await (await request.get('/api/v2/config')).json();
   snapshot.config.layout.columns = 8;
   expect((await request.put('/api/v2/config', { data: { revision: snapshot.revision, config: snapshot.config } })).ok()).toBeTruthy();
@@ -1222,7 +1226,7 @@ test('touch dialog controls retain a 44 pixel target in both dimensions', async 
   const context = await browser.newContext({ viewport: { width: 360, height: 900 }, isMobile: true, hasTouch: true });
   try {
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:59996/');
+    await page.goto(baseURL!);
     await page.getByRole('button', { name: 'Play / pause', exact: true }).waitFor();
     await page.keyboard.press('q');
     await page.setViewportSize({ width: 768, height: 900 });
@@ -1499,11 +1503,11 @@ test('missing metric readings stay readable on narrow tiles', async ({ page }, t
   await page.screenshot({ path: testInfo.outputPath('missing-metric-360.png') });
 });
 
-test('touch settings controls expose usable targets including checkbox labels and navigation', async ({ browser }) => {
+test('touch settings controls expose usable targets including checkbox labels and navigation', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ viewport: { width: 360, height: 900 }, isMobile: true, hasTouch: true });
   try {
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:59996/');
+    await page.goto(baseURL!);
     await page.getByRole('button', { name: 'Play / pause', exact: true }).waitFor();
     await page.keyboard.press('Control+,');
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
@@ -1525,11 +1529,11 @@ test('touch settings controls expose usable targets including checkbox labels an
   } finally { await context.close(); }
 });
 
-test('touch action fields keep full-size controls across specialized and generic forms', async ({ browser }) => {
+test('touch action fields keep full-size controls across specialized and generic forms', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ viewport: { width: 360, height: 900 }, isMobile: true, hasTouch: true });
   try {
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:59996/');
+    await page.goto(baseURL!);
     await page.getByRole('button', { name: 'Play / pause', exact: true }).waitFor();
     await page.keyboard.press('q');
     await page.getByRole('button', { name: 'Edit Play / pause', exact: true }).click();

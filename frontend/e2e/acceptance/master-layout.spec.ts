@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync } from 'node:fs';
 const demo = JSON.parse(readFileSync('../examples/demo-v2/config.json', 'utf8'));
 test.beforeEach(async ({ request }) => {
