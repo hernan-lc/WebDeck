@@ -11,6 +11,16 @@ Release profiles and developer builds are unchanged. Its Rust cache is saved eve
 when a later test fails, so a failing assertion does not discard compiled
 dependencies. Cache keys separate these profile settings and the selected linker.
 
+Development portable ZIPs use deflate level 1; Windows development installers use
+`lzma2/fast`. These favor packaging time over artifact size. Release compression
+stays unchanged, and checksums, payload checks, and installed-application checks
+still run. Compare packaging and upload durations together because larger
+development artifacts may take longer to transfer.
+
+Validation hosts use shared cleanup that recognizes both ordinary and signal
+exits, subscribes before termination, and bounds graceful and forced shutdown.
+Process-cleanup regression tests run in both native CI jobs.
+
 Dispatch `ci` on the same revision with `fast_linkers` disabled and enabled to
 compare Linux's default linker against clang/mold. Set `windows_lld` false and
 true to compare MSVC against detected `lld-link`. Both tools have availability

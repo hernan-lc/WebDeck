@@ -54,7 +54,9 @@ fn main() -> io::Result<()> {
     fs::create_dir_all("dist")?;
     let mut zip = zip::ZipWriter::new(fs::File::create(Path::new("dist").join(&name))?);
     let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+        .compression_method(zip::CompressionMethod::Deflated)
+        // Development CI artifacts favor packaging speed over minimum size.
+        .compression_level(if dev { Some(1) } else { None });
     for (bin, label) in [
         ("webdeck", "WebDeck"),
         ("update", "update"),

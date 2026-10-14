@@ -1,3 +1,4 @@
+import { stopChild } from './child-process.mjs';
 // The development harness uses Node; the product process has no JS tools in PATH.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -16,7 +17,6 @@ writeFileSync(path.join(plugin, 'webdeck.json'), JSON.stringify({schema_version:
 const binary = process.env.WEBDECK_RUNTIME_BINARY ?? path.join(root, 'target', 'debug', process.platform === 'win32' ? 'webdeck.exe' : 'webdeck');
 const child = spawn(binary, ['--no-tray','--host','127.0.0.1','--port','59991'], {cwd:root,env:{...process.env, PATH:emptyPath, WEBDECK_CONFIG_DIR:directory},stdio:['ignore','ignore','pipe']});
 let failure; let stderr=''; child.on('error',error=>failure=error); child.stderr.on('data',bytes=>stderr+=bytes);
-const exited = new Promise(resolve=>child.once('exit',resolve));
 const base='http://127.0.0.1:59991/api/v2/';
 try {
   const deadline=Date.now()+10000;
@@ -41,7 +41,6 @@ try {
   assert.equal((await fetch(base+'runtime/reload',{method:'POST'})).status,200);
   console.log('Embedded runtime smoke passed with Node, Bun and npm absent from product PATH.');
 } finally {
-  child.kill('SIGINT'); const timer=setTimeout(()=>child.kill('SIGKILL'),5000);
-  await exited; clearTimeout(timer); rmSync(directory,{recursive:true,force:true});
+  await stopChild(child); rmSync(directory,{recursive:true,force:true});
   assert(!stderr.includes('VM probe'), 'Guest errors must not be printed to diagnostics');
 }

@@ -1,3 +1,4 @@
+import { stopChild } from './child-process.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -20,7 +21,6 @@ child.stderr.on('data', bytes => {
   stderr += bytes.toString();
   if (stderr.length > 65536) { spawnError = new Error('Unexpected diagnostic volume'); child.kill(); }
 });
-const exited = new Promise(resolve => child.once('exit', resolve));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 try {
   const deadline = Date.now() + 10000;
@@ -68,8 +68,6 @@ try {
   if (output) { mkdirSync(path.dirname(output), { recursive: true }); writeFileSync(output, JSON.stringify(report, null, 2) + '\n'); }
   console.log('Diagnostic HTTP smoke passed: completed/rejected events and metadata redaction.');
 } finally {
-  child.kill('SIGINT');
-  await Promise.race([exited, wait(2000)]);
-  if (child.exitCode === null) { child.kill('SIGKILL'); await exited; }
+  await stopChild(child);
   rmSync(directory, { recursive: true, force: true });
 }

@@ -129,8 +129,10 @@ jobs:
           npm run build --prefix runtime
           npm run build --prefix frontend
 
-      - name: Verify checkout plugin digests
-        run: node tools/validation/plugin-digests.mjs
+      - name: Verify plugin digests and validation process cleanup
+        run: |
+          node tools/validation/plugin-digests.mjs
+          node --test tools/validation/child-process.test.mjs
 
       - name: Rust formatting and Clippy
         run: |
@@ -272,8 +274,10 @@ jobs:
           npm run build --prefix runtime
           npm run build --prefix frontend
 
-      - name: Verify checkout plugin digests
-        run: node tools/validation/plugin-digests.mjs
+      - name: Verify plugin digests and validation process cleanup
+        run: |
+          node tools/validation/plugin-digests.mjs
+          node --test tools/validation/child-process.test.mjs
 
       - name: Windows Rust Clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings

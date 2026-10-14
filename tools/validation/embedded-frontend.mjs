@@ -1,3 +1,4 @@
+import { stopChild } from './child-process.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -20,7 +21,6 @@ const child = spawn(binary, ['--no-tray', '--host', '127.0.0.1', '--port', Strin
   env: { ...process.env, WEBDECK_CONFIG_DIR: path.join(directory, 'config') },
   stdio: 'ignore',
 });
-const exited = once(child, 'exit');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 let browser;
 try {
@@ -79,10 +79,6 @@ try {
   console.log('Embedded frontend passed: current HTML, JS, CSS and favicon; missing/stale disk files ignored; Chromium UI loads.');
 } finally {
   await browser?.close();
-  if (child.exitCode === null) {
-    child.kill('SIGINT');
-    await Promise.race([exited, wait(2000)]);
-    if (child.exitCode === null) { child.kill('SIGKILL'); await exited; }
-  }
+  await stopChild(child);
   rmSync(directory, { recursive: true, force: true });
 }

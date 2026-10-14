@@ -1,3 +1,4 @@
+import { stopChild } from './child-process.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -16,7 +17,6 @@ const directory = mkdtempSync(path.join(tmpdir(), 'webdeck-debug-cwd-'));
 const child = spawn(path.join(root, 'target/debug', process.platform === 'win32' ? 'webdeck.exe' : 'webdeck'), ['--no-tray', '--port', String(port)], {
   cwd: path.join(root, 'target/release'), env: { ...process.env, WEBDECK_CONFIG_DIR: directory }, stdio: 'ignore',
 });
-const exited = once(child, 'exit');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 let browser;
 try {
@@ -39,15 +39,11 @@ try {
   await page.goto(base);
   await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('tab', { name: 'Connection', exact: true }).click();
-  await page.getByRole('heading', { name: 'Phone access', exact: true }).waitFor();
-  console.log('Debug working-directory regression passed: translations, deck and phone settings load from target/release.');
+  await page.getByRole('tab', { name: 'Devices & Connections', exact: true }).click();
+  await page.getByRole('heading', { name: 'Devices & Connections', exact: true }).waitFor();
+  console.log('Debug working-directory regression passed: translations, deck and device settings load from target/release.');
 } finally {
   await browser?.close();
-  if (child.exitCode === null) {
-    child.kill('SIGINT');
-    await Promise.race([exited, wait(2000)]);
-    if (child.exitCode === null) { child.kill('SIGKILL'); await exited; }
-  }
+  await stopChild(child);
   rmSync(directory, { recursive: true, force: true });
 }

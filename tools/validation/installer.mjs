@@ -1,3 +1,4 @@
+import { stopChild } from './child-process.mjs';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { readFileSync, mkdtempSync, mkdirSync, cpSync, rmSync, existsSync } from 'node:fs';
@@ -60,11 +61,7 @@ try {
   console.log(`Installer validated: ${path.basename(artifact)}; native host and packaged UI; no desktop effects invoked`);
 } finally {
   await browser?.close();
-  if (child && child.exitCode === null) {
-    const exited = new Promise(resolve => child.once('exit', resolve));
-    child.kill('SIGINT'); await Promise.race([exited, wait(2000)]);
-    if (child.exitCode === null) { child.kill('SIGKILL'); await exited; }
-  }
+  await stopChild(child);
   if (uninstaller && existsSync(uninstaller)) run(uninstaller, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']);
   if (mount) run('hdiutil', ['detach', mount]);
   rmSync(directory, { recursive: true, force: true });
