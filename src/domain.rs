@@ -107,12 +107,12 @@ fn check(s: &Value, v: &Value, depth: usize) -> Result<()> {
             if t.contains('\0') {
                 return Err(Error::invalid());
             }
-            if s.get("pattern").is_some()
-                && !t
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"_.-".contains(&c))
-            {
-                return Err(Error::invalid());
+            if let Some(pattern) = s.get("pattern") {
+                let pattern = pattern.as_str().ok_or_else(Error::invalid)?;
+                let regex = regex::Regex::new(pattern).map_err(|_| Error::invalid())?;
+                if !regex.is_match(t) {
+                    return Err(Error::invalid());
+                }
             }
         }
         Some("integer") => {
@@ -326,5 +326,34 @@ pub fn action_command(action: &ButtonAction) -> Option<Command> {
             args: args.clone(),
         }),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn schema_patterns_enforce_digest_and_identifier_rules() {
+        let digest = json!({"type":"string", "pattern":"^[a-f0-9]{64}$"});
+        assert!(check(&digest, &json!("a".repeat(64)), 0).is_ok());
+        for invalid in ["a".repeat(63), "g".repeat(64), "A".repeat(64)] {
+            assert!(check(&digest, &json!(invalid), 0).is_err());
+        }
+        let identifier = json!({"type":"string", "pattern":"^[A-Za-z][A-Za-z0-9_]{0,63}$"});
+        assert!(check(&identifier, &json!("Device_1"), 0).is_ok());
+        for invalid in ["1Device", "Device.name", "Device-name", ""] {
+            assert!(check(&identifier, &json!(invalid), 0).is_err());
+        }
+        assert!(check(&identifier, &json!("a".repeat(65)), 0).is_err());
+    }
+
+    #[test]
+    fn patterns_use_regex_search_semantics_and_reject_invalid_rules() {
+        let schema = json!({"type":"string", "pattern":"[0-9]+"});
+        assert!(check(&schema, &json!("device 42!"), 0).is_ok());
+        assert!(check(&schema, &json!("device"), 0).is_err());
+        assert!(check(&json!({"type":"string", "pattern":"["}), &json!("a"), 0).is_err());
     }
 }

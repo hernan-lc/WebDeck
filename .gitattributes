@@ -1,0 +1,2 @@
+# Plugin manifests verify the exact entrypoint bytes with SHA-256.
+examples/plugins/** text eol=lf

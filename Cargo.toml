@@ -68,6 +68,7 @@ nvml-wrapper = "0.13.0"
 rodio = "0.22.2"
 socketioxide = "0.18.7"
 rfd = { version = "0.17.2", default-features = false, features = ["common-controls-v6", "xdg-portal"] }
+regex = "1"
 
 [target.'cfg(windows)'.dependencies]
 # Native tray event loop.
