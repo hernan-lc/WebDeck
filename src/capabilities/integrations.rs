@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 use super::*;
 #[cfg(target_os = "linux")]
 pub(super) fn media(action: &str, context: &Context) -> Result<Value> {
