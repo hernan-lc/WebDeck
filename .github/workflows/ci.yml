@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       fast_linkers:
-        description: Test mold on Linux and lld-link on Windows
+        description: Test clang/mold on Linux
         type: boolean
         default: false
+      windows_lld:
+        description: Use LLVM lld-link on Windows when available
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -217,15 +221,23 @@ jobs:
     name: Windows native, browser and packaging
     runs-on: windows-2025
     timeout-minutes: 60
+    env:
+      # Keep line-level backtraces while reducing object and PDB size in CI.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Configure Windows linker experiment
-        if: ${{ inputs.fast_linkers == true }}
+      - name: Configure Windows LLVM linker
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_lld == true }}
         shell: pwsh
         run: |
           $lld = Get-Command lld-link.exe -ErrorAction SilentlyContinue
+          if (-not $lld) {
+            $llvm = Join-Path $env:ProgramFiles 'LLVM\bin\lld-link.exe'
+            if (Test-Path $llvm) { $lld = Get-Command $llvm }
+          }
           if ($lld) {
             "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($lld.Source)" >> $env:GITHUB_ENV
             "WEBDECK_CI_LINKER=lld-link" >> $env:GITHUB_ENV
@@ -239,7 +251,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          key: windows-v2-${{ env.WEBDECK_CI_LINKER || 'default' }}
+          key: windows-v3-line-tables-${{ env.WEBDECK_CI_LINKER || 'default' }}
+          cache-on-failure: true
       - uses: actions/setup-node@v7
         with:
           node-version: "24"

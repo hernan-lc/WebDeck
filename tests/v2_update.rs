@@ -18,11 +18,19 @@ fn tempdir() -> std::io::Result<Temp> {
     Ok(Temp(path))
 }
 use webdeck::update::{digest, install, install_with, stage};
+fn executable_name() -> &'static str {
+    if cfg!(windows) {
+        "WebDeck.exe"
+    } else {
+        "WebDeck"
+    }
+}
 fn archive(extra: &[(&str, &[u8])]) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let executable = format!("WebDeck/{}", executable_name());
     for (name, bytes) in [
-        ("WebDeck/WebDeck", b"new".as_slice()),
-        ("WebDeck/WebDeck.exe", b"new".as_slice()),
+        // Windows cannot contain both the file `WebDeck` and directory `webdeck`.
+        (executable.as_str(), b"new".as_slice()),
         (
             "WebDeck/webdeck/config_default.json",
             include_bytes!("../webdeck/config_default.json").as_slice(),
@@ -52,12 +60,15 @@ fn verified_upgrade_and_rollback_preserve_user_config_and_original_permissions()
     std::fs::create_dir(&live).unwrap();
     std::fs::create_dir(live.join(".config")).unwrap();
     std::fs::write(live.join(".config/config.json"), b"user data").unwrap();
-    std::fs::write(live.join("WebDeck"), b"old").unwrap();
+    std::fs::write(live.join(executable_name()), b"old").unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(live.join("WebDeck"), std::fs::Permissions::from_mode(0o751))
-            .unwrap();
+        std::fs::set_permissions(
+            live.join(executable_name()),
+            std::fs::Permissions::from_mode(0o751),
+        )
+        .unwrap();
     }
     let bytes = archive(&[]);
     let staged = stage(
@@ -68,7 +79,7 @@ fn verified_upgrade_and_rollback_preserve_user_config_and_original_permissions()
     .unwrap();
     let backup = root.path().join("backup");
     install(&staged, &live, &backup).unwrap();
-    assert_eq!(std::fs::read(live.join("WebDeck")).unwrap(), b"new");
+    assert_eq!(std::fs::read(live.join(executable_name())).unwrap(), b"new");
     assert_eq!(
         std::fs::read(live.join(".config/config.json")).unwrap(),
         b"user data"
@@ -82,12 +93,12 @@ fn verified_upgrade_and_rollback_preserve_user_config_and_original_permissions()
         .output()
         .unwrap();
     assert!(result.status.success());
-    assert_eq!(std::fs::read(live.join("WebDeck")).unwrap(), b"old");
+    assert_eq!(std::fs::read(live.join(executable_name())).unwrap(), b"old");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(
-            std::fs::metadata(live.join("WebDeck"))
+            std::fs::metadata(live.join(executable_name()))
                 .unwrap()
                 .permissions()
                 .mode()
@@ -106,7 +117,7 @@ fn interrupted_install_restores_all_originals_and_removes_new_files() {
     let root = tempdir().unwrap();
     let live = root.path().join("live");
     std::fs::create_dir(&live).unwrap();
-    std::fs::write(live.join("WebDeck"), b"old").unwrap();
+    std::fs::write(live.join(executable_name()), b"old").unwrap();
     let bytes = archive(&[]);
     let staged = stage(
         &bytes,
@@ -123,8 +134,9 @@ fn interrupted_install_restores_all_originals_and_removes_new_files() {
         })
         .is_err()
     );
-    assert_eq!(std::fs::read(live.join("WebDeck")).unwrap(), b"old");
-    assert!(!live.join("WebDeck.exe").exists());
+    assert_eq!(std::fs::read(live.join(executable_name())).unwrap(), b"old");
+    assert!(!live.join("frontend/dist/index.html").exists());
+    assert!(!live.join("webdeck/config_default.json").exists());
     assert!(backup.join("rolled-back").is_file());
 }
 #[test]

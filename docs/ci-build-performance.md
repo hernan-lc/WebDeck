@@ -1,15 +1,20 @@
 # CI correctness and linker measurements
 
-Normal pushes and pull requests use the platform's default linker. First verify
-those jobs, including the plugin integration test and Linux portable rollback.
-Example plugin sources are checked against their manifest SHA-256 digests after
-checkout; `.gitattributes` preserves LF even with `core.autocrlf=true`.
+Linux pushes and pull requests use the default linker. Windows detects LLVM
+`lld-link` (on PATH or in `Program Files/LLVM/bin`) and falls back to MSVC when
+unavailable. Example plugin sources are checked against their manifest SHA-256
+digests after checkout; `.gitattributes` preserves LF with `core.autocrlf=true`.
+
+Windows CI uses `line-tables-only` debug information for development and test
+profiles, retaining line-level backtraces while reducing object and PDB size.
+Release profiles and developer builds are unchanged. Its Rust cache is saved even
+when a later test fails, so a failing assertion does not discard compiled
+dependencies. Cache keys separate these profile settings and the selected linker.
 
 Dispatch `ci` on the same revision with `fast_linkers` disabled and enabled to
-compare linkers. Enabled runs attempt clang/mold on Linux and detect
-`lld-link.exe` on Windows, falling back to the default linker when unavailable.
-The selected linker stays fixed throughout the job and has a separate Rust cache
-key. Developers do not need to install these tools.
+compare Linux's default linker against clang/mold. Set `windows_lld` false and
+true to compare MSVC against detected `lld-link`. Both tools have availability
+fallbacks and remain fixed throughout the job. Developers do not need them.
 
 Rust tests, native host builds, and packaging Cargo invocations emit `--timings`
 reports. Download `cargo-timings-linux` and `cargo-timings-windows` and compare
@@ -21,9 +26,9 @@ cache is not a fair comparison. Record runner image, Rust version, revision,
 selected linker, cache state, build/test/package durations, and total job duration.
 
 All existing Clippy, integration, portable, installer, and application checks stay
-enabled. Promote a linker to the default after these checks pass and comparable
-cold and warm measurements show a useful improvement. Windows compatibility needs
-native runner results. The configuration alone does not establish a speedup.
+enabled. Compare cold and warm measurements before claiming a speedup. Windows linker
+compatibility and performance need native runner results; the configuration alone
+does not establish a speedup.
 
 The explicit trusted-plugin example build remains necessary: `cargo test
 --all-targets` builds test harnesses rather than the standalone executable used
